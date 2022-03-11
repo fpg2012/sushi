@@ -1,0 +1,18 @@
+[package]
+name = "sushi"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+liquid = "0.24.0"
+serde = "1.0"
+serde_yaml = "0.8"
+serde-frontmatter = "0.1.0"
+subprocess = "0.2.8"
+lazy_static = "1.4.0"
+itertools = "0.10.3"
+log = "0.4.14"
+simple_logger = "2.1.0"
+clap = "3.1.6"
