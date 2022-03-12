@@ -2,11 +2,12 @@ use crate::converters::Converter;
 use crate::site::SiteTreeNode::*;
 use liquid::partials::{EagerCompiler, InMemorySource};
 use liquid::{ParserBuilder, Template};
-use log::debug;
+use log::{debug, info};
+use serde_frontmatter;
 use serde_yaml::Value;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::option::Option;
 use std::path::PathBuf;
@@ -33,7 +34,6 @@ pub enum SiteTreeNode {
 #[derive(Debug)]
 pub struct Page {
     front_matter: HashMap<String, serde_yaml::Value>,
-    original_content: Rc<Vec<u8>>,
 }
 
 pub struct Site {
@@ -109,7 +109,7 @@ impl Site {
         let converters = Self::_parse_converters(temp_converters.path());
 
         // parse dir
-        let mut site_tree = Rc::new(RefCell::new(NormalDir {
+        let site_tree = Rc::new(RefCell::new(NormalDir {
             children: vec![],
             path: site_dir.clone(),
             index: None,
@@ -117,7 +117,8 @@ impl Site {
         Self::_gen_tree(site_tree.clone());
         debug!("{:?}", site_tree);
 
-        let gen_dir = site_dir.clone();
+        let mut gen_dir = site_dir.clone();
+        gen_dir.push("_gen");
 
         let (convert_ext, converter_choice, taxonomies) = Self::_extract_important_config(&config);
         debug!("{:?}", convert_ext);
@@ -136,6 +137,116 @@ impl Site {
             taxonomies,
         }
     }
+    pub fn generate_site(&self) {
+        self._generate(self.site_tree.clone());
+    }
+
+    pub fn _generate(&self, current_node: NodeRef) -> bool {
+        match &mut *current_node.clone().borrow_mut() {
+            SiteTreeNode::NormalDir {
+                children,
+                path,
+                index,
+            } => {
+                let dest_path = self._get_dest_path(path, false);
+                debug!("try create dir {:?}", dest_path);
+                fs::create_dir_all(dest_path).expect("cannot create dir");
+                for child in children.iter() {
+                    if self._generate(child.clone()) {
+                        *index = Some(child.clone());
+                        debug!("{:?} has index", path);
+                    }
+                }
+                false
+            }
+            SiteTreeNode::NormalFile { path, page } => {
+                if self.convert_ext.contains(
+                    &path
+                        .extension()
+                        .unwrap_or(OsString::from("no_ext").as_os_str())
+                        .to_string_lossy()
+                        .to_string(),
+                ) {
+                    debug!("gen {}", path.clone().to_string_lossy());
+                    self.convert_page(path, page);
+                } else {
+                    let dest_path = self._get_dest_path(path, false);
+                    debug!("copy {}", path.clone().to_string_lossy());
+                    fs::copy(path.clone(), dest_path);
+                }
+                path.file_stem().unwrap_or(OsStr::new("")) == OsStr::new("index")
+                    && self.convert_ext.contains(
+                        &path
+                            .extension()
+                            .unwrap_or(OsStr::new(""))
+                            .to_string_lossy()
+                            .to_string(),
+                    )
+            }
+            _ => panic!("unknown node type"),
+        }
+    }
+
+    pub fn convert_page(&self, path: &PathBuf, page: &mut Option<Page>) {
+        let dest_path = self._get_dest_path(path, true);
+        let full_page = fs::read_to_string(path).expect("cannot read file");
+        let (fm, content) =
+            serde_frontmatter::deserialize::<HashMap<String, Value>>(full_page.as_str())
+                .unwrap_or((HashMap::new(), full_page));
+
+        let mut converted = content;
+        let mut converter_choice = String::new();
+        if let Some(choice) = self.converter_choice
+            .get(path.extension().unwrap_or(OsStr::new("")).to_str().unwrap())
+        {
+            converter_choice = choice.clone();
+        }
+
+        if let Some(converter) = self.converters.get(&converter_choice) {
+            converted = converter.convert(converted);
+        } else {
+            debug!("no converter set");
+        }
+
+        let layout = fm.get("layout");
+        let mut rendered = converted;
+        if let Some(Value::String(s)) = layout {
+            debug!("try to use layout {}", s);
+            if let Some(template) = self.templates.get(s) {
+                let globals = liquid::object!({
+                    "site": self.config,
+                    "page": fm,
+                    "content": rendered,
+                });
+                let ren = template.render(&globals).expect("render failed");
+                rendered = ren;
+            }
+        } else {
+            debug!("no layout set");
+        }
+
+        *page = Some(Page { front_matter: fm });
+        match fs::write(&dest_path, rendered) {
+            Ok(_) => (),
+            Err(_) => info!("cannot write to {:?}", dest_path),
+        }
+    }
+
+    fn _get_converter_dir(&self) -> PathBuf {
+        let mut temp = PathBuf::from(&self.site_dir);
+        temp.push("_converters");
+        temp
+    }
+
+    fn _get_dest_path(&self, path: &PathBuf, is_page: bool) -> PathBuf {
+        let mut dest = PathBuf::from(&self.gen_dir);
+        dest.push(path.strip_prefix(&self.site_dir).unwrap());
+        if is_page {
+            dest.set_extension("html");
+        }
+        dest
+    }
+
     fn _extract_important_config(
         config: &HashMap<String, Value>,
     ) -> (HashSet<String>, HashMap<String, String>, HashSet<String>) {
@@ -169,10 +280,8 @@ impl Site {
                 }
             }));
         }
-
         (convert_ext, converter_choice, taxonomies)
     }
-
     fn _gen_tree(current_node: NodeRef) {
         let cnode = current_node.clone();
         match &mut *cnode.borrow_mut() {
