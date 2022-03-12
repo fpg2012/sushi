@@ -3,14 +3,14 @@ use std::path::PathBuf;
 use subprocess::Exec;
 
 pub struct Converter {
-    pub(crate) name: String,
-    pub(crate) path: PathBuf,
+    pub name: String,
+    pub path: PathBuf,
 }
 
 impl Converter {
     pub fn convert(&self, content: String) -> String {
         let cur_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&self.path.parent().unwrap());
+        std::env::set_current_dir(&self.path.parent().unwrap()).unwrap();
         let mut temp_dir = PathBuf::from(".");
         temp_dir.push(&self.path.file_name().unwrap());
         debug!("invoking {:?}", temp_dir);
@@ -19,7 +19,7 @@ impl Converter {
             .capture()
             .expect("converter error")
             .stdout_str();
-        std::env::set_current_dir(cur_dir);
+        std::env::set_current_dir(cur_dir).unwrap();
         read_content
     }
 }

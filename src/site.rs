@@ -1,5 +1,6 @@
 use crate::converters::Converter;
 use crate::site::SiteTreeNode::*;
+use crate::layout::Layout;
 use liquid::partials::{EagerCompiler, InMemorySource};
 use liquid::{ParserBuilder, Template};
 use log::{debug, info};
@@ -13,6 +14,7 @@ use std::option::Option;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::string::String;
+use chrono;
 use std::vec::Vec;
 
 type NodeRef = Rc<RefCell<SiteTreeNode>>;
@@ -39,7 +41,7 @@ pub struct Page {
 pub struct Site {
     site_dir: PathBuf,
     config: HashMap<String, serde_yaml::Value>,
-    templates: HashMap<String, liquid::Template>,
+    templates: HashMap<String, Layout>,
     converters: HashMap<String, Converter>,
     gen_dir: PathBuf,
     site_tree: NodeRef,
@@ -172,7 +174,7 @@ impl Site {
                 } else {
                     let dest_path = self._get_dest_path(path, false);
                     debug!("copy {}", path.clone().to_string_lossy());
-                    fs::copy(path.clone(), dest_path);
+                    fs::copy(path.clone(), dest_path).unwrap();
                 }
                 path.file_stem().unwrap_or(OsStr::new("")) == OsStr::new("index")
                     && self.convert_ext.contains(
@@ -190,7 +192,7 @@ impl Site {
     pub fn convert_page(&self, path: &PathBuf, page: &mut Option<Page>) {
         let dest_path = self._get_dest_path(path, true);
         let full_page = fs::read_to_string(path).expect("cannot read file");
-        let (fm, content) =
+        let (mut fm, content) =
             serde_frontmatter::deserialize::<HashMap<String, Value>>(full_page.as_str())
                 .unwrap_or((HashMap::new(), full_page));
 
@@ -208,18 +210,22 @@ impl Site {
             debug!("no converter set");
         }
 
+        fm.insert(String::from("url"), Value::String(self._get_page_url(path)));
         let layout = fm.get("layout");
         let mut rendered = converted;
         if let Some(Value::String(s)) = layout {
             debug!("try to use layout {}", s);
-            if let Some(template) = self.templates.get(s) {
-                let globals = liquid::object!({
+            let mut l = s;
+            while let Some(template) = self.templates.get(l) {
+                debug!("current template {}", l);
+                let mut globals = liquid::object!({
                     "site": self.config,
                     "page": fm,
                     "content": rendered,
                 });
-                let ren = template.render(&globals).expect("render failed");
+                let ren = template.render(&mut globals).expect("render failed");
                 rendered = ren;
+                l = template.get_parent();
             }
         } else {
             debug!("no layout set");
@@ -230,6 +236,11 @@ impl Site {
             Ok(_) => (),
             Err(_) => info!("cannot write to {:?}", dest_path),
         }
+    }
+
+    fn _get_page_url(&self, path: &PathBuf) -> String {
+        let temp = path.strip_prefix(&self.site_dir).unwrap();
+        String::from("/") + temp.to_str().unwrap()
     }
 
     fn _get_converter_dir(&self) -> PathBuf {
@@ -288,7 +299,7 @@ impl Site {
             NormalDir {
                 children,
                 path,
-                index,
+                ..
             } => {
                 debug!("scan {}", path.to_string_lossy());
                 for entry in fs::read_dir(path.clone()).unwrap() {
@@ -329,8 +340,9 @@ impl Site {
     }
     fn _parse_config_file(path: PathBuf) -> HashMap<String, Value> {
         let raw_config = fs::read(path).expect("cannot read config file");
-        let config: HashMap<String, Value> =
+        let mut config: HashMap<String, Value> =
             serde_yaml::from_slice(raw_config.as_slice()).expect("cannot parse config file");
+        config.insert(String::from("time"), Value::String(chrono::Local::now().to_rfc3339()));
         debug!("{:?}", config);
         config
     }
@@ -359,7 +371,7 @@ impl Site {
     fn _parse_templates(
         path: PathBuf,
         partials: EagerCompiler<InMemorySource>,
-    ) -> HashMap<String, Template> {
+    ) -> HashMap<String, Layout> {
         let mut templates = HashMap::new();
         let parser = ParserBuilder::with_stdlib()
             .partials(partials)
@@ -371,9 +383,12 @@ impl Site {
                     if ext == "liquid" {
                         let content =
                             fs::read_to_string(entry.path()).expect("cannot open template file");
+                        let (fm, real_content) = serde_frontmatter::deserialize(content.as_str())
+                            .unwrap_or((HashMap::new(), content));
                         let template = parser
-                            .parse(content.as_str())
+                            .parse(real_content.as_str())
                             .expect("compiler template faild");
+                        let layout = Layout::new(fm, template);
                         templates.insert(
                             entry
                                 .path()
@@ -381,7 +396,7 @@ impl Site {
                                 .unwrap()
                                 .to_string_lossy()
                                 .to_string(),
-                            template,
+                            layout,
                         );
                         debug!(
                             "add {} to templates",
