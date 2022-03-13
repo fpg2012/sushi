@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use log::debug;
 use liquid;
+use log::debug;
 use serde_yaml::Value;
+use std::collections::HashMap;
 
 pub struct Layout {
     parent: String,
@@ -18,7 +18,7 @@ impl Layout {
         Self {
             parent,
             template,
-            front_matter: fm
+            front_matter: fm,
         }
     }
 
@@ -38,7 +38,10 @@ impl Layout {
             }));
             debug!("{:?}", page);
         } else {
-            globals.insert("page".parse().unwrap(), liquid::model::value!(self.front_matter));
+            globals.insert(
+                "page".parse().unwrap(),
+                liquid::model::value!(self.front_matter),
+            );
         }
         debug!("globals {:?}", &globals);
         self.template.render(globals)
