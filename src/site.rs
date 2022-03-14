@@ -6,7 +6,7 @@ use chrono;
 use itertools::Itertools;
 use liquid::partials::{EagerCompiler, InMemorySource};
 use liquid::ParserBuilder;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use serde_frontmatter;
 use serde_yaml::Value;
 use std::cell::RefCell;
@@ -90,7 +90,7 @@ impl Site {
         let partial_compiler = if let Some(Ok(temp)) = temp_includes {
             Self::_parse_includes(temp.path())
         } else {
-            debug!("no include template found");
+            warn!("no include template found");
             liquid::partials::EagerCompiler::empty()
         };
 
@@ -152,6 +152,8 @@ impl Site {
         let (site_tree_object, _) = self._gen_site_tree_object(self.site_tree.clone().unwrap());
         self.site_tree_object = site_tree_object;
         self._gen_taxo_object();
+        let temp = serde_yaml::to_string(&self.taxo_object).unwrap_or("error".to_string());
+        debug!("{}", temp);
         self._generate(self.site_tree.clone().unwrap());
     }
 
@@ -159,19 +161,19 @@ impl Site {
         match &mut *current_node.clone().borrow_mut() {
             SiteTreeNode::NormalDir { children, path, .. } => {
                 let dest_path = self._get_dest_path(path, false);
-                debug!("try create dir {:?}", dest_path);
+                info!("[create]\t {:?}", dest_path);
                 fs::create_dir_all(dest_path).expect("cannot create dir");
                 for child in children.iter() {
                     self._generate(child.clone());
                 }
             }
             SiteTreeNode::PageFile { path, page } => {
-                debug!("gen {}", path.clone().to_string_lossy());
+                info!("[gen]\t {}", path.clone().to_string_lossy());
                 self.convert_page(path, page.clone());
             }
             SiteTreeNode::StaticFile { path } => {
                 let dest_path = self._get_dest_path(path, false);
-                debug!("copy {}", path.clone().to_string_lossy());
+                info!("[copy]\t {}", path.clone().to_string_lossy());
                 fs::copy(path.clone(), dest_path).unwrap();
             }
             _ => panic!("unknown node type"),
@@ -299,17 +301,17 @@ impl Site {
         if let Some(converter) = self.converters.get(&converter_choice) {
             converted = converter.convert(converted);
         } else {
-            debug!("no converter set");
+            warn!("no converter set, copy by default");
         }
 
         let page_config = page.borrow().get_page_config(true);
         let layout = page_config.get("layout");
         let mut rendered = converted;
         if let Some(Value::String(layout_str)) = layout {
-            debug!("try to use layout {}", layout_str);
+            // debug!("try to use layout {}", layout_str);
             let mut current_layout = layout_str;
             while let Some(template) = self.templates.get(current_layout) {
-                debug!("current template {}", current_layout);
+                // debug!("current template {}", current_layout);
                 let mut globals = liquid::object!({
                     "site": self.config,
                     "page": page_config,
@@ -319,7 +321,7 @@ impl Site {
                 });
                 let render_result = template.render(&mut globals);
                 if render_result.is_err() {
-                    error!("{:?}", render_result.err());
+                    error!("{}", render_result.err().unwrap());
                     panic!("render failed");
                 }
                 let current_rendered = render_result.unwrap();
@@ -327,12 +329,12 @@ impl Site {
                 current_layout = template.get_parent();
             }
         } else {
-            debug!("no layout set");
+            warn!("no layout set, copy by default");
         }
 
         match fs::write(&dest_path, rendered) {
             Ok(_) => (),
-            Err(_) => info!("cannot write to {:?}", dest_path),
+            Err(_) => error!("cannot write to {:?}", dest_path),
         }
     }
 
@@ -379,7 +381,6 @@ impl Site {
                         serde_yaml::Value::Mapping(page.borrow().get_page_config_object(false)),
                     )
                 } else {
-                    debug!("path: {:?}", path.clone());
                     SiteTreeObjectType::Dir(path.file_stem().unwrap().to_string_lossy().to_string())
                 };
 
@@ -400,12 +401,51 @@ impl Site {
         for page in self.pages.iter() {
             for (taxo, v) in self.taxonomies.iter_mut() {
                 for kind in page.borrow().belongs_to_kind(taxo).iter() {
+                    if let None = v.get(kind) {
+                        v.insert(kind.clone(), RefCell::new(vec![]));
+                    }
                     v[kind].borrow_mut().push(serde_yaml::Value::Mapping(
                         page.borrow().get_page_config_object(false),
                     ));
                 }
             }
         }
+
+        let mut taxo_to_kind = serde_yaml::Mapping::new();
+        for (taxo, v) in self.taxonomies.iter() {
+            let mut kind_to_vec = serde_yaml::Mapping::new();
+            for (kind, pages) in v.iter() {
+                let mut seq = serde_yaml::Sequence::new();
+                seq.extend(pages.borrow().iter().map(|x| {
+                    x.clone()
+                }));
+                kind_to_vec.insert(
+                    serde_yaml::Value::String(kind.clone()),
+                    serde_yaml::Value::Sequence(seq)
+                );
+            }
+            kind_to_vec.insert(
+                serde_yaml::Value::String("_keys".to_string()),
+                serde_yaml::Value::Sequence(serde_yaml::Sequence::from_iter(
+                    v.keys().map(|x| {
+                        debug!("{}", x.clone());
+                        serde_yaml::Value::String(x.clone())
+                    })
+                ))
+            );
+            taxo_to_kind.insert(
+                serde_yaml::Value::String(taxo.clone()),
+                serde_yaml::Value::Mapping(kind_to_vec),
+            );
+        }
+        taxo_to_kind.insert(
+            serde_yaml::Value::String("_keys".to_string()),
+            serde_yaml::Value::Sequence(serde_yaml::Sequence::from_iter(self.taxonomies.keys().map(|x| {
+                serde_yaml::Value::String(x.clone())
+            })))
+        );
+
+        self.taxo_object = Some(serde_yaml::Value::Mapping(taxo_to_kind));
     }
 
     fn _get_page_url(&self, path: &PathBuf) -> String {
@@ -490,8 +530,8 @@ impl Site {
                                 .expect("cannot open liquid partial in include");
                             compiler
                                 .add(entry.path().file_stem().unwrap().to_string_lossy(), content);
-                            debug!(
-                                "add {} to partials",
+                            info!(
+                                "find partial: \"{}\"",
                                 entry.path().file_stem().unwrap().to_string_lossy()
                             );
                         }
@@ -531,8 +571,8 @@ impl Site {
                                 .to_string(),
                             layout,
                         );
-                        debug!(
-                            "add {} to templates",
+                        info!(
+                            "find template: \"{}\"",
                             entry.path().file_stem().unwrap().to_string_lossy()
                         );
                     }
@@ -552,8 +592,8 @@ impl Site {
                         path: entry.path(),
                     },
                 );
-                debug!(
-                    "find converter {}",
+                info!(
+                    "find converter: \"{}\"",
                     entry.file_name().to_string_lossy().to_string()
                 );
             }

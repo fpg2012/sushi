@@ -36,14 +36,14 @@ impl Layout {
                     Some((k.clone(), v.clone()))
                 }
             }));
-            debug!("{:?}", page);
         } else {
             globals.insert(
                 "page".parse().unwrap(),
                 liquid::model::value!(self.front_matter),
             );
         }
-        debug!("globals {:?}", &globals);
+        let temp = serde_yaml::to_string(&globals).unwrap_or("error".to_string());
+        debug!("globals {}", temp);
         self.template.render(globals)
     }
 }

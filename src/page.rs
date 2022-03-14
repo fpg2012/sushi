@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::SystemTime;
 use itertools::Itertools;
+use log::debug;
 
 pub type PageRef = Rc<RefCell<Page>>;
 
