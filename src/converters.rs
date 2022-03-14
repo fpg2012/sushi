@@ -13,7 +13,7 @@ impl Converter {
         std::env::set_current_dir(&self.path.parent().unwrap()).unwrap();
         let mut temp_dir = PathBuf::from(".");
         temp_dir.push(&self.path.file_name().unwrap());
-        debug!("invoking {:?}", temp_dir);
+        // debug!("invoking {:?}", temp_dir);
         let read_content = Exec::cmd(temp_dir)
             .stdin(content.as_bytes().to_vec())
             .capture()

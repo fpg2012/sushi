@@ -152,8 +152,8 @@ impl Site {
         let (site_tree_object, _) = self._gen_site_tree_object(self.site_tree.clone().unwrap());
         self.site_tree_object = site_tree_object;
         self._gen_taxo_object();
-        let temp = serde_yaml::to_string(&self.taxo_object).unwrap_or("error".to_string());
-        debug!("{}", temp);
+        // let temp = serde_yaml::to_string(&self.taxo_object).unwrap_or("error".to_string());
+        // debug!("{}", temp);
         self._generate(self.site_tree.clone().unwrap());
     }
 
@@ -161,19 +161,19 @@ impl Site {
         match &mut *current_node.clone().borrow_mut() {
             SiteTreeNode::NormalDir { children, path, .. } => {
                 let dest_path = self._get_dest_path(path, false);
-                info!("[create]\t {:?}", dest_path);
+                info!("[mkdir]  {:?}", dest_path);
                 fs::create_dir_all(dest_path).expect("cannot create dir");
                 for child in children.iter() {
                     self._generate(child.clone());
                 }
             }
             SiteTreeNode::PageFile { path, page } => {
-                info!("[gen]\t {}", path.clone().to_string_lossy());
+                info!("[conv]  {}", path.clone().to_string_lossy());
                 self.convert_page(path, page.clone());
             }
             SiteTreeNode::StaticFile { path } => {
                 let dest_path = self._get_dest_path(path, false);
-                info!("[copy]\t {}", path.clone().to_string_lossy());
+                info!("[copy]  {}", path.clone().to_string_lossy());
                 fs::copy(path.clone(), dest_path).unwrap();
             }
             _ => panic!("unknown node type"),
@@ -301,7 +301,7 @@ impl Site {
         if let Some(converter) = self.converters.get(&converter_choice) {
             converted = converter.convert(converted);
         } else {
-            warn!("no converter set, copy by default");
+            debug!("no converter set, copy by default");
         }
 
         let page_config = page.borrow().get_page_config(true);
@@ -329,7 +329,7 @@ impl Site {
                 current_layout = template.get_parent();
             }
         } else {
-            warn!("no layout set, copy by default");
+            debug!("no layout set, copy by default");
         }
 
         match fs::write(&dest_path, rendered) {
@@ -428,7 +428,7 @@ impl Site {
                 serde_yaml::Value::String("_keys".to_string()),
                 serde_yaml::Value::Sequence(serde_yaml::Sequence::from_iter(
                     v.keys().map(|x| {
-                        debug!("{}", x.clone());
+                        // debug!("{}", x.clone());
                         serde_yaml::Value::String(x.clone())
                     })
                 ))
@@ -531,7 +531,7 @@ impl Site {
                             compiler
                                 .add(entry.path().file_stem().unwrap().to_string_lossy(), content);
                             info!(
-                                "find partial: \"{}\"",
+                                "[discover] partial: \"{}\"",
                                 entry.path().file_stem().unwrap().to_string_lossy()
                             );
                         }
@@ -572,7 +572,7 @@ impl Site {
                             layout,
                         );
                         info!(
-                            "find template: \"{}\"",
+                            "[discover] template: \"{}\"",
                             entry.path().file_stem().unwrap().to_string_lossy()
                         );
                     }
@@ -593,7 +593,7 @@ impl Site {
                     },
                 );
                 info!(
-                    "find converter: \"{}\"",
+                    "[discover] converter: \"{}\"",
                     entry.file_name().to_string_lossy().to_string()
                 );
             }
