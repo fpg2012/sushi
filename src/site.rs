@@ -56,11 +56,14 @@ pub struct Site {
 
     convert_ext: HashSet<String>,
     converter_choice: HashMap<String, String>,
-    taxonomies: HashMap<String, HashMap<String, RefCell<Vec<SiteTreeObject>>>>,
+    taxonomies: HashMap<String, HashMap<String, RefCell<Vec<PageRef>>>>,
+    pages: Vec<PageRef>,
+    id_to_page: HashMap<String, PageRef>,
 
     site_tree_object: Option<serde_yaml::Value>,
     taxo_object: Option<serde_yaml::Value>,
-    pages: Vec<PageRef>,
+    id_to_page_object: Option<serde_yaml::Value>,
+    all_pages_object: Option<serde_yaml::Value>,
 }
 
 impl Site {
@@ -141,40 +144,71 @@ impl Site {
             convert_ext,
             converter_choice,
             taxonomies,
+            pages: vec![],
+            id_to_page: HashMap::new(),
             site_tree_object: None,
             taxo_object: None,
-            pages: vec![],
+            all_pages_object: None,
+            id_to_page_object: None,
         }
     }
     pub fn generate_site(&mut self) {
+        // gen site tree
         let (site_tree, _) = self._gen_site_tree(&self.site_dir.clone());
         self.site_tree = Some(site_tree);
+
+        // gen sitetree object based on self.site_tree
         let (site_tree_object, _) = self._gen_site_tree_object(self.site_tree.clone().unwrap());
         self.site_tree_object = site_tree_object;
+
+        // gen taxo object based on self.taxonomies
         self._gen_taxo_object();
         // let temp = serde_yaml::to_string(&self.taxo_object).unwrap_or("error".to_string());
         // debug!("{}", temp);
-        self._generate(self.site_tree.clone().unwrap());
+
+        // gen id_to_page object
+        let id_to_page_object = self._gen_id_to_page_object();
+        self.id_to_page_object = Some(id_to_page_object);
+
+        // gen all_pages object
+        let all_pages_object = self._gen_all_pages_object();
+        self.all_pages_object = Some(all_pages_object);
+
+        // assemble global object
+        let mut globals = liquid::object!({
+            "site": self.config,
+            "sitetree": self.site_tree_object,
+            "taxo": self.taxo_object,
+            "all_pages": self.all_pages_object,
+            "id_to_page": self.id_to_page_object,
+        });
+
+        // gen _gen
+        self._generate(self.site_tree.clone().unwrap(), globals);
     }
 
-    fn _generate(&self, current_node: NodeRef) {
+    fn _generate(&self, current_node: NodeRef, mut globals: liquid::Object) -> liquid::Object {
         match &mut *current_node.clone().borrow_mut() {
             SiteTreeNode::NormalDir { children, path, .. } => {
                 let dest_path = self._get_dest_path(path, false);
                 info!("[mkdir]  {:?}", dest_path);
                 fs::create_dir_all(dest_path).expect("cannot create dir");
+                let mut globals= globals;
                 for child in children.iter() {
-                    self._generate(child.clone());
+                    globals = self._generate(child.clone(), globals)
                 }
+                globals
             }
             SiteTreeNode::PageFile { path, page } => {
                 info!("[conv]  {}", path.clone().to_string_lossy());
-                self.convert_page(path, page.clone());
+                self.convert_page(path, page.clone(), &mut globals);
+                globals
             }
             SiteTreeNode::StaticFile { path } => {
                 let dest_path = self._get_dest_path(path, false);
                 info!("[copy]  {}", path.clone().to_string_lossy());
                 fs::copy(path.clone(), dest_path).unwrap();
+                globals
             }
             _ => panic!("unknown node type"),
         }
@@ -239,8 +273,15 @@ impl Site {
                 let (fm, _) = result.unwrap_or((HashMap::new(), "".to_string()));
                 let url = self._get_page_url(path);
                 let page = Rc::new(RefCell::new(Page::new(fm, url)));
-                // add page to self.pages
+                // check whether page_id is unique
+                let page_id = page.borrow().get_page_id().clone();
+                if self.id_to_page.contains_key(&page_id) {
+                    error!("id \"{}\" is not unique!", page_id);
+                    panic!();
+                }
+                // add page to self.pages and self.id_to_page
                 self.pages.push(page.clone());
+                self.id_to_page.insert(page_id, page.clone());
                 // return node and ref of index
                 let node = Rc::new(RefCell::new(SiteTreeNode::PageFile {
                     path: path.clone(),
@@ -282,7 +323,7 @@ impl Site {
             == "index"
     }
 
-    pub fn convert_page(&self, path: &PathBuf, page: PageRef) {
+    pub fn convert_page(&self, path: &PathBuf, page: PageRef, base_globals: &mut liquid::Object) {
         let dest_path = self._get_dest_path(path, true);
         let full_page = fs::read_to_string(path).expect("cannot read file");
         let (_, content) =
@@ -304,7 +345,7 @@ impl Site {
             debug!("no converter set, copy by default");
         }
 
-        let page_config = page.borrow().get_page_config(true);
+        let page_config = page.borrow().get_page_config();
         let layout = page_config.get("layout");
         let mut rendered = converted;
         if let Some(Value::String(layout_str)) = layout {
@@ -312,14 +353,9 @@ impl Site {
             let mut current_layout = layout_str;
             while let Some(template) = self.templates.get(current_layout) {
                 // debug!("current template {}", current_layout);
-                let mut globals = liquid::object!({
-                    "site": self.config,
-                    "page": page_config,
-                    "sitetree": self.site_tree_object,
-                    "taxo": self.taxo_object,
-                    "content": rendered,
-                });
-                let render_result = template.render(&mut globals);
+                base_globals.insert("page".parse().unwrap(), liquid::model::to_value(&page_config).unwrap());
+                base_globals.insert("content".parse().unwrap(), liquid::model::to_value(&rendered).unwrap());
+                let render_result = template.render(base_globals);
                 if render_result.is_err() {
                     error!("{}", render_result.err().unwrap());
                     panic!("render failed");
@@ -378,7 +414,7 @@ impl Site {
                 } else if let Some(page) = index {
                     SiteTreeObjectType::DirWithIndexPage(
                         path.file_stem().unwrap().to_string_lossy().to_string(),
-                        serde_yaml::Value::Mapping(page.borrow().get_page_config_object(false)),
+                        serde_yaml::Value::Mapping(page.borrow().get_page_config_object()),
                     )
                 } else {
                     SiteTreeObjectType::Dir(path.file_stem().unwrap().to_string_lossy().to_string())
@@ -387,9 +423,8 @@ impl Site {
                 (Some(serde_yaml::Value::Mapping(object)), object_type)
             }
             PageFile { page, .. } => {
-                let map = page.borrow().get_page_config_object(false);
                 (
-                    Some(serde_yaml::Value::Mapping(map)),
+                    Some(serde_yaml::Value::String(page.borrow().get_page_id().clone())),
                     SiteTreeObjectType::Page,
                 )
             }
@@ -398,26 +433,26 @@ impl Site {
     }
 
     fn _gen_taxo_object(&mut self) {
+        // gen self.taxonomies
         for page in self.pages.iter() {
             for (taxo, v) in self.taxonomies.iter_mut() {
                 for kind in page.borrow().belongs_to_kind(taxo).iter() {
                     if let None = v.get(kind) {
                         v.insert(kind.clone(), RefCell::new(vec![]));
                     }
-                    v[kind].borrow_mut().push(serde_yaml::Value::Mapping(
-                        page.borrow().get_page_config_object(false),
-                    ));
+                    v[kind].borrow_mut().push(page.clone());
                 }
             }
         }
 
+        // gen self.taxo_object based on self.taxonomies
         let mut taxo_to_kind = serde_yaml::Mapping::new();
         for (taxo, v) in self.taxonomies.iter() {
             let mut kind_to_vec = serde_yaml::Mapping::new();
             for (kind, pages) in v.iter() {
                 let mut seq = serde_yaml::Sequence::new();
                 seq.extend(pages.borrow().iter().map(|x| {
-                    x.clone()
+                    serde_yaml::Value::String(x.borrow().get_page_id().clone())
                 }));
                 kind_to_vec.insert(
                     serde_yaml::Value::String(kind.clone()),
@@ -448,6 +483,24 @@ impl Site {
         self.taxo_object = Some(serde_yaml::Value::Mapping(taxo_to_kind));
     }
 
+    fn _gen_id_to_page_object(&self) -> serde_yaml::Value {
+        let mut obj = serde_yaml::Mapping::new();
+        for (k, v) in self.id_to_page.iter() {
+            obj.insert(serde_yaml::Value::String(k.clone()),
+                       serde_yaml::Value::Mapping(v.borrow().get_page_config_object())
+            );
+        }
+        serde_yaml::Value::Mapping(obj)
+    }
+
+    fn _gen_all_pages_object(&self) -> serde_yaml::Value {
+        let mut obj = serde_yaml::Sequence::new();
+        for p in self.pages.iter() {
+            obj.push(serde_yaml::Value::String(p.borrow().get_page_id().clone()))
+        }
+        serde_yaml::Value::Sequence(obj)
+    }
+
     fn _get_page_url(&self, path: &PathBuf) -> String {
         let temp = path.strip_prefix(&self.site_dir).unwrap();
         String::from("/") + temp.to_str().unwrap()
@@ -473,7 +526,7 @@ impl Site {
     ) -> (
         HashSet<String>,
         HashMap<String, String>,
-        HashMap<String, HashMap<String, RefCell<Vec<SiteTreeObject>>>>,
+        HashMap<String, HashMap<String, RefCell<Vec<PageRef>>>>,
     ) {
         let mut convert_ext = HashSet::new();
         if let Some(Value::Sequence(ext)) = config.get("convert_ext") {

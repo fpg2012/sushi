@@ -1,5 +1,5 @@
 use liquid;
-use log::debug;
+use log::{debug, trace};
 use serde_yaml::Value;
 use std::collections::HashMap;
 
@@ -43,7 +43,7 @@ impl Layout {
             );
         }
         let temp = serde_yaml::to_string(&globals).unwrap_or("error".to_string());
-        debug!("globals {}", temp);
+        trace!("globals {}", temp);
         self.template.render(globals)
     }
 }
