@@ -1,4 +1,3 @@
-use log::debug;
 use std::path::PathBuf;
 use subprocess::Exec;
 

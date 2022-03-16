@@ -74,6 +74,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
+name = "bytes"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4872d67bab6358e59559027aa3b9157c53d9358c51423c17554809a8858e0f8"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -179,12 +185,6 @@ name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
-
-[[package]]
-name = "fs_extra"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2022715d62ab30faffd124d40b76f4134a550a87792276512b18d63272333394"
 
 [[package]]
 name = "generic-array"
@@ -580,16 +580,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-frontmatter"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5f2ff98738814471fe9b0be6230493527d11f2d93c776cc82539c308972de13"
-dependencies = [
- "serde",
- "serde_yaml",
-]
-
-[[package]]
 name = "serde_derive"
 version = "1.0.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -657,16 +647,16 @@ dependencies = [
 name = "sushi"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "chrono",
  "clap",
  "directories",
- "fs_extra",
  "itertools",
  "lazy_static",
  "liquid",
  "log",
+ "regex",
  "serde",
- "serde-frontmatter",
  "serde_yaml",
  "simple_logger",
  "subprocess",

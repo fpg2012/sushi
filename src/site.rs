@@ -2,12 +2,12 @@ use crate::converters::Converter;
 use crate::layout::Layout;
 use crate::page::{Page, PageRef};
 use crate::site::SiteTreeNode::*;
+use crate::extract_frontmatter::extract_front_matter;
 use chrono;
 use itertools::Itertools;
 use liquid::partials::{EagerCompiler, InMemorySource};
 use liquid::ParserBuilder;
-use log::{debug, error, info, warn};
-use serde_frontmatter;
+use log::{debug, error, info, trace, warn};
 use serde_yaml::Value;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::string::String;
 use std::vec::Vec;
+use crate::paginator::Paginator;
 
 type NodeRef = Rc<RefCell<SiteTreeNode>>;
 type SiteTreeObject = serde_yaml::Value;
@@ -49,6 +50,7 @@ enum SiteTreeObjectType {
 pub struct Site {
     site_dir: PathBuf,
     config: HashMap<String, serde_yaml::Value>,
+    site_url: Option<String>,
     templates: HashMap<String, Layout>,
     converters: HashMap<String, Converter>,
     gen_dir: PathBuf,
@@ -81,6 +83,11 @@ impl Site {
             .expect("cannot find configuration file: _site.yml")
             .unwrap();
         let config = Self::_parse_config_file(temp_config.path());
+        let site_url = if let Some(serde_yaml::Value::String(s)) = config.get("url") {
+            Some(s.clone())
+        } else {
+            None
+        };
 
         // search for _includes
         let temp_includes = fs::read_dir(site_dir.clone()).unwrap().find(|x| {
@@ -137,6 +144,7 @@ impl Site {
         Site {
             site_dir,
             config,
+            site_url,
             templates,
             converters,
             gen_dir,
@@ -171,11 +179,15 @@ impl Site {
         self.id_to_page_object = Some(id_to_page_object);
 
         // gen all_pages object
+        // sort all_pages
+        self.pages.sort_by(|a, b| {
+            a.borrow().date().cmp(b.borrow().date())
+        });
         let all_pages_object = self._gen_all_pages_object();
         self.all_pages_object = Some(all_pages_object);
 
         // assemble global object
-        let mut globals = liquid::object!({
+        let globals = liquid::object!({
             "site": self.config,
             "sitetree": self.site_tree_object,
             "taxo": self.taxo_object,
@@ -201,7 +213,7 @@ impl Site {
             }
             SiteTreeNode::PageFile { path, page } => {
                 info!("[conv]  {}", path.clone().to_string_lossy());
-                self.convert_page(path, page.clone(), &mut globals);
+                self.gen_page(path, page.clone(), &mut globals);
                 globals
             }
             SiteTreeNode::StaticFile { path } => {
@@ -266,13 +278,9 @@ impl Site {
         } else if path.is_file() {
             // check whether it is page file by extension name
             if self.check_page(path) {
-                let content = fs::read_to_string(path).expect("cannot open page file");
-                let result = serde_frontmatter::deserialize::<HashMap<String, serde_yaml::Value>>(
-                    content.as_str(),
-                );
-                let (fm, _) = result.unwrap_or((HashMap::new(), "".to_string()));
-                let url = self._get_page_url(path);
-                let page = Rc::new(RefCell::new(Page::new(fm, url)));
+                let (fm, _) = extract_front_matter(path);
+                let url = self.get_page_url(path);
+                let page = Rc::new(RefCell::new(Page::new(fm, url, path.clone())));
                 // check whether page_id is unique
                 let page_id = page.borrow().get_page_id().clone();
                 if self.id_to_page.contains_key(&page_id) {
@@ -323,12 +331,9 @@ impl Site {
             == "index"
     }
 
-    pub fn convert_page(&self, path: &PathBuf, page: PageRef, base_globals: &mut liquid::Object) {
+    pub fn gen_page(&self, path: &PathBuf, page: PageRef, base_globals: &mut liquid::Object) {
         let dest_path = self._get_dest_path(path, true);
-        let full_page = fs::read_to_string(path).expect("cannot read file");
-        let (_, content) =
-            serde_frontmatter::deserialize::<HashMap<String, Value>>(full_page.as_str())
-                .unwrap_or((HashMap::new(), full_page));
+        let (_, content) = extract_front_matter(path);
 
         let mut converted = content;
         let mut converter_choice = String::new();
@@ -346,32 +351,86 @@ impl Site {
         }
 
         let page_config = page.borrow().get_page_config();
-        let layout = page_config.get("layout");
-        let mut rendered = converted;
-        if let Some(Value::String(layout_str)) = layout {
-            // debug!("try to use layout {}", layout_str);
-            let mut current_layout = layout_str;
-            while let Some(template) = self.templates.get(current_layout) {
-                // debug!("current template {}", current_layout);
-                base_globals.insert("page".parse().unwrap(), liquid::model::to_value(&page_config).unwrap());
-                base_globals.insert("content".parse().unwrap(), liquid::model::to_value(&rendered).unwrap());
-                let render_result = template.render(base_globals);
-                if render_result.is_err() {
-                    error!("{}", render_result.err().unwrap());
-                    panic!("render failed");
+
+        let paginator = page.borrow().paginate_info();
+        match paginator {
+            None => {
+                let layout = page_config.get("layout");
+                let mut rendered = converted;
+                if let Some(Value::String(layout_str)) = layout {
+                    debug!("try to use layout {}", layout_str);
+                    let mut current_layout = layout_str;
+                    while let Some(template) = self.templates.get(current_layout) {
+                        debug!("current template {}", current_layout);
+                        base_globals.insert("page".parse().unwrap(), liquid::model::to_value(&page_config).unwrap());
+                        base_globals.insert("content".parse().unwrap(), liquid::model::to_value(&rendered).unwrap());
+                        let render_result = template.render(base_globals);
+                        if render_result.is_err() {
+                            error!("{}", render_result.err().unwrap());
+                            panic!("render failed");
+                        }
+                        let current_rendered = render_result.unwrap();
+                        rendered = current_rendered;
+                        current_layout = template.get_parent();
+                    }
+                } else {
+                    debug!("no layout set, copy by default");
                 }
-                let current_rendered = render_result.unwrap();
-                rendered = current_rendered;
-                current_layout = template.get_parent();
+                match fs::write(&dest_path, rendered) {
+                    Ok(_) => (),
+                    Err(_) => error!("cannot write to {:?}", dest_path),
+                }
+            },
+            Some((exp, batch_size)) => {
+                match Paginator::from_expression_and_object(base_globals, &exp, batch_size, dest_path.clone()) {
+                    Ok(p) => {
+                        fs::remove_dir(p.base_url_dir());
+                        fs::create_dir(p.base_url_dir());
+                        let mut rendered = converted;
+                        let mut paginator_object = p.gen_paginator_object();
+                        let batch_urls = p.batch_paths().iter().map(|x| {
+                            self.get_page_url_from_dest(x)
+                        }).collect_vec();
+                        paginator_object.insert("batch_urls".parse().unwrap(), liquid::model::to_value(&batch_urls).unwrap());
+                        for (i, (dest_path, batch)) in p.batch_iter().enumerate() {
+                            let layout = page_config.get("layout");
+                            paginator_object.insert("current_batch".parse().unwrap(), liquid::model::to_value(&batch).unwrap());
+                            paginator_object.insert("current_batch_num".parse().unwrap(), liquid::model::to_value(&i).unwrap());
+                            if let Some(Value::String(layout_str)) = layout {
+                                debug!("try to use layout {}", layout_str);
+                                let mut current_layout = layout_str;
+                                while let Some(template) = self.templates.get(current_layout) {
+                                    debug!("current template {}", current_layout);
+                                    base_globals.insert("page".parse().unwrap(), liquid::model::to_value(&page_config).unwrap());
+                                    base_globals.insert("content".parse().unwrap(), liquid::model::to_value(&rendered).unwrap());
+                                    base_globals.insert("paginator".parse().unwrap(), liquid::model::to_value(&paginator_object).unwrap());
+                                    let render_result = template.render(base_globals);
+                                    if render_result.is_err() {
+                                        error!("{}", render_result.err().unwrap());
+                                        panic!("render failed");
+                                    }
+                                    let current_rendered = render_result.unwrap();
+                                    rendered = current_rendered;
+                                    current_layout = template.get_parent();
+                                }
+                            } else {
+                                trace!("no layout set, copy by default");
+                            }
+                            match fs::write(&dest_path, &rendered) {
+                                Ok(_) => (),
+                                Err(_) => error!("cannot write to {:?}", dest_path),
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        error!("cannot parse {:?} to a list", &exp);
+                    }
+                }
             }
-        } else {
-            debug!("no layout set, copy by default");
         }
 
-        match fs::write(&dest_path, rendered) {
-            Ok(_) => (),
-            Err(_) => error!("cannot write to {:?}", dest_path),
-        }
+
+
     }
 
     fn _gen_site_tree_object(&self, node: NodeRef) -> (Option<SiteTreeObject>, SiteTreeObjectType) {
@@ -501,9 +560,30 @@ impl Site {
         serde_yaml::Value::Sequence(obj)
     }
 
-    fn _get_page_url(&self, path: &PathBuf) -> String {
-        let temp = path.strip_prefix(&self.site_dir).unwrap();
-        String::from("/") + temp.to_str().unwrap()
+    pub fn get_page_url(&self, path: &PathBuf) -> String {
+        let mut temp = PathBuf::from(path.strip_prefix(&self.site_dir).unwrap());
+        let stem = temp.clone();
+        let stem = stem.file_stem().unwrap();
+        temp.pop();
+        temp.push(stem);
+        if let Some(s) = &self.site_url {
+            s.to_string() + "/" + temp.to_str().unwrap() + ".html"
+        } else {
+            String::from("/") + temp.to_str().unwrap() + ".html"
+        }
+    }
+
+    pub fn get_page_url_from_dest(&self, path: &PathBuf) -> String {
+        let mut temp = PathBuf::from(path.strip_prefix(&self.gen_dir).unwrap());
+        let stem = temp.clone();
+        let stem = stem.file_stem().unwrap();
+        temp.pop();
+        temp.push(stem);
+        if let Some(s) = &self.site_url {
+            s.to_string() + "/" + temp.to_str().unwrap() + ".html"
+        } else {
+            String::from("/") + temp.to_str().unwrap() + ".html"
+        }
     }
 
     fn _get_converter_dir(&self) -> PathBuf {
@@ -607,10 +687,7 @@ impl Site {
             if let Ok(entry) = entry {
                 if let Some(ext) = entry.path().extension() {
                     if ext == "liquid" {
-                        let content =
-                            fs::read_to_string(entry.path()).expect("cannot open template file");
-                        let (fm, real_content) = serde_frontmatter::deserialize(content.as_str())
-                            .unwrap_or((HashMap::new(), content));
+                        let (fm, real_content) = extract_front_matter(&entry.path());
                         let template = parser
                             .parse(real_content.as_str())
                             .expect("compiler template faild");

@@ -1,10 +1,11 @@
-use chrono::{FixedOffset, Local};
+use chrono::{DateTime, Local, NaiveDateTime, NaiveTime, TimeZone};
 use itertools::Itertools;
-use log::{debug, trace};
+use log::debug;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::SystemTime;
 
@@ -16,24 +17,37 @@ pub struct Page {
     pub front_matter: HashMap<String, serde_yaml::Value>,
     // pub other_attributes: HashMap<String, serde_yaml::Value>,
     pub url: String,
-    date: chrono::DateTime<FixedOffset>,
+    pub path: PathBuf,
+    date: chrono::DateTime<Local>,
     next: Option<PageRef>,
     last: Option<PageRef>,
     page_id: PageId,
 }
 
 impl Page {
-    pub fn new(front_matter: HashMap<String, serde_yaml::Value>, url: String) -> Self {
+    pub fn new(front_matter: HashMap<String, serde_yaml::Value>, url: String, path: PathBuf) -> Self {
         // get or gen date
         let date = if let Some(serde_yaml::Value::String(date)) = front_matter.get("date") {
-            chrono::DateTime::parse_from_rfc3339(date).unwrap_or(chrono::DateTime::from(
-                chrono::DateTime::<Local>::from(SystemTime::now()),
-            ))
+            match chrono::DateTime::parse_from_rfc3339(date) {
+                Ok(date) => DateTime::<Local>::from(date),
+                Err(_) => match chrono::NaiveDateTime::parse_from_str(date, "%Y-%m-%dT%H:%M:%S") {
+                    Ok(date) => Local.from_local_datetime(&date).unwrap(),
+                    Err(_) => match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
+                        Ok(date) => Local
+                            .from_local_datetime(&NaiveDateTime::new(
+                                date,
+                                NaiveTime::from_hms(0, 0, 0),
+                            ))
+                            .unwrap(),
+                        Err(_) => DateTime::<Local>::from(SystemTime::now()),
+                    },
+                },
+            }
         } else {
             debug!("date is not defined in front_matter, use system time");
             chrono::DateTime::from(chrono::DateTime::<Local>::from(SystemTime::now()))
         };
-        trace!("date: {}", date);
+        debug!("date: {}", date);
         // get or gen id
         let page_id = if let Some(serde_yaml::Value::String(id)) = front_matter.get("page_id") {
             id.clone()
@@ -50,6 +64,7 @@ impl Page {
             next: None,
             last: None,
             page_id,
+            path,
         }
     }
 
@@ -106,6 +121,7 @@ impl Page {
                 );
             }
         }
+        config.insert("path".to_string(), serde_yaml::Value::String(self.path.to_string_lossy().to_string()));
         config
     }
 
@@ -129,8 +145,21 @@ impl Page {
         &self.last
     }
 
-    pub fn date(&self) -> &chrono::DateTime<FixedOffset> {
+    pub fn date(&self) -> &chrono::DateTime<Local> {
         &self.date
+    }
+
+    pub fn paginate_info(&self) -> Option<(String, usize)> {
+        match (self.front_matter.get("paginate"), self.front_matter.get("paginate_batch")) {
+            (Some(serde_yaml::Value::String(exp)), Some(serde_yaml::Value::Number(num))) => {
+                if num.is_u64() {
+                    Some((exp.clone(), num.as_u64().unwrap() as usize))
+                } else {
+                    None
+                }
+            }
+            (_, _) => None,
+        }
     }
 
     pub fn belongs_to_kind(&self, taxo: &String) -> Vec<String> {

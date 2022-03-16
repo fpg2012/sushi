@@ -1,5 +1,5 @@
 use liquid;
-use log::{debug, trace};
+use log::trace;
 use serde_yaml::Value;
 use std::collections::HashMap;
 

@@ -2,16 +2,17 @@ mod converters;
 mod layout;
 mod page;
 mod site;
+mod batch_iterator;
+mod extract_frontmatter;
+mod paginator;
 
-use std::error::Error;
 use std::fs;
 use std::fs::read_dir;
 use std::path::PathBuf;
 use clap::Parser;
-use log::{debug, error, info};
+use log::{error, info};
 use crate::site::Site;
 use simple_logger::SimpleLogger;
-use directories::ProjectDirs;
 
 #[derive(clap::Parser)]
 #[clap(name = "sūshì", author = "nth233", version, about)]
