@@ -1,18 +1,18 @@
+mod batch_iterator;
 mod converters;
+mod extract_frontmatter;
 mod layout;
 mod page;
-mod site;
-mod batch_iterator;
-mod extract_frontmatter;
 mod paginator;
+mod site;
 
+use crate::site::Site;
+use clap::Parser;
+use log::{error, info};
+use simple_logger::SimpleLogger;
 use std::fs;
 use std::fs::read_dir;
 use std::path::PathBuf;
-use clap::Parser;
-use log::{error, info};
-use crate::site::Site;
-use simple_logger::SimpleLogger;
 
 #[derive(clap::Parser)]
 #[clap(name = "sūshì", author = "nth233", version, about)]
@@ -101,12 +101,16 @@ fn main() {
     SimpleLogger::new().with_level(level).init().unwrap();
 
     match &cli.commands {
-        Command::Init { site_name, theme, path } => {
+        Command::Init {
+            site_name,
+            theme,
+            path,
+        } => {
             initialize_site(site_name, theme, path);
-        },
+        }
         Command::Build => {
             let mut site = Site::parse_site_dir(".".into());
             site.generate_site();
-        },
+        }
     }
 }

@@ -1,8 +1,8 @@
+use log::trace;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use log::trace;
+use std::path::PathBuf;
 
 enum ExtractorState {
     Start,
@@ -11,8 +11,7 @@ enum ExtractorState {
 }
 
 pub fn extract_front_matter(path: &PathBuf) -> (HashMap<String, serde_yaml::Value>, String) {
-    let f = File::open(path)
-        .expect("cannot open file");
+    let f = File::open(path).expect("cannot open file");
     let f = BufReader::new(f);
     let mut front_matter = String::new();
     let mut content = String::new();
@@ -48,7 +47,7 @@ pub fn extract_front_matter(path: &PathBuf) -> (HashMap<String, serde_yaml::Valu
         }
     }
     trace!("{:?}, {:?}", &front_matter, &content);
-    let fm: HashMap<String, serde_yaml::Value> = serde_yaml::from_str(front_matter.as_str())
-        .unwrap_or(HashMap::new());
+    let fm: HashMap<String, serde_yaml::Value> =
+        serde_yaml::from_str(front_matter.as_str()).unwrap_or(HashMap::new());
     (fm, content)
 }

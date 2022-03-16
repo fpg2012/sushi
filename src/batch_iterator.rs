@@ -29,7 +29,7 @@ impl<T: Iterator, U: Iterator> Iterator for BatchIterator<T, U> {
             if let Some(item) = self.items.next() {
                 temp_vec.push(item);
             } else if i == 0 {
-                return None
+                return None;
             }
         }
         self.current_batch += 1;

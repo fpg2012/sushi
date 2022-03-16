@@ -1,8 +1,9 @@
 use crate::converters::Converter;
+use crate::extract_frontmatter::extract_front_matter;
 use crate::layout::Layout;
 use crate::page::{Page, PageRef};
+use crate::paginator::Paginator;
 use crate::site::SiteTreeNode::*;
-use crate::extract_frontmatter::extract_front_matter;
 use chrono;
 use itertools::Itertools;
 use liquid::partials::{EagerCompiler, InMemorySource};
@@ -18,7 +19,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::string::String;
 use std::vec::Vec;
-use crate::paginator::Paginator;
 
 type NodeRef = Rc<RefCell<SiteTreeNode>>;
 type SiteTreeObject = serde_yaml::Value;
@@ -180,9 +180,8 @@ impl Site {
 
         // gen all_pages object
         // sort all_pages
-        self.pages.sort_by(|a, b| {
-            a.borrow().date().cmp(b.borrow().date())
-        });
+        self.pages
+            .sort_by(|a, b| a.borrow().date().cmp(b.borrow().date()));
         let all_pages_object = self._gen_all_pages_object();
         self.all_pages_object = Some(all_pages_object);
 
@@ -205,7 +204,7 @@ impl Site {
                 let dest_path = self._get_dest_path(path, false);
                 info!("[mkdir]  {:?}", dest_path);
                 fs::create_dir_all(dest_path).expect("cannot create dir");
-                let mut globals= globals;
+                let mut globals = globals;
                 for child in children.iter() {
                     globals = self._generate(child.clone(), globals)
                 }
@@ -362,8 +361,14 @@ impl Site {
                     let mut current_layout = layout_str;
                     while let Some(template) = self.templates.get(current_layout) {
                         debug!("current template {}", current_layout);
-                        base_globals.insert("page".parse().unwrap(), liquid::model::to_value(&page_config).unwrap());
-                        base_globals.insert("content".parse().unwrap(), liquid::model::to_value(&rendered).unwrap());
+                        base_globals.insert(
+                            "page".parse().unwrap(),
+                            liquid::model::to_value(&page_config).unwrap(),
+                        );
+                        base_globals.insert(
+                            "content".parse().unwrap(),
+                            liquid::model::to_value(&rendered).unwrap(),
+                        );
                         let render_result = template.render(base_globals);
                         if render_result.is_err() {
                             error!("{}", render_result.err().unwrap());
@@ -380,30 +385,55 @@ impl Site {
                     Ok(_) => (),
                     Err(_) => error!("cannot write to {:?}", dest_path),
                 }
-            },
+            }
             Some((exp, batch_size)) => {
-                match Paginator::from_expression_and_object(base_globals, &exp, batch_size, dest_path.clone()) {
+                match Paginator::from_expression_and_object(
+                    base_globals,
+                    &exp,
+                    batch_size,
+                    dest_path.clone(),
+                ) {
                     Ok(p) => {
                         fs::remove_dir(p.base_url_dir());
                         fs::create_dir(p.base_url_dir());
                         let mut rendered = converted;
                         let mut paginator_object = p.gen_paginator_object();
-                        let batch_urls = p.batch_paths().iter().map(|x| {
-                            self.get_page_url_from_dest(x)
-                        }).collect_vec();
-                        paginator_object.insert("batch_urls".parse().unwrap(), liquid::model::to_value(&batch_urls).unwrap());
+                        let batch_urls = p
+                            .batch_paths()
+                            .iter()
+                            .map(|x| self.get_page_url_from_dest(x))
+                            .collect_vec();
+                        paginator_object.insert(
+                            "batch_urls".parse().unwrap(),
+                            liquid::model::to_value(&batch_urls).unwrap(),
+                        );
                         for (i, (dest_path, batch)) in p.batch_iter().enumerate() {
                             let layout = page_config.get("layout");
-                            paginator_object.insert("current_batch".parse().unwrap(), liquid::model::to_value(&batch).unwrap());
-                            paginator_object.insert("current_batch_num".parse().unwrap(), liquid::model::to_value(&i).unwrap());
+                            paginator_object.insert(
+                                "current_batch".parse().unwrap(),
+                                liquid::model::to_value(&batch).unwrap(),
+                            );
+                            paginator_object.insert(
+                                "current_batch_num".parse().unwrap(),
+                                liquid::model::to_value(&i).unwrap(),
+                            );
                             if let Some(Value::String(layout_str)) = layout {
                                 debug!("try to use layout {}", layout_str);
                                 let mut current_layout = layout_str;
                                 while let Some(template) = self.templates.get(current_layout) {
                                     debug!("current template {}", current_layout);
-                                    base_globals.insert("page".parse().unwrap(), liquid::model::to_value(&page_config).unwrap());
-                                    base_globals.insert("content".parse().unwrap(), liquid::model::to_value(&rendered).unwrap());
-                                    base_globals.insert("paginator".parse().unwrap(), liquid::model::to_value(&paginator_object).unwrap());
+                                    base_globals.insert(
+                                        "page".parse().unwrap(),
+                                        liquid::model::to_value(&page_config).unwrap(),
+                                    );
+                                    base_globals.insert(
+                                        "content".parse().unwrap(),
+                                        liquid::model::to_value(&rendered).unwrap(),
+                                    );
+                                    base_globals.insert(
+                                        "paginator".parse().unwrap(),
+                                        liquid::model::to_value(&paginator_object).unwrap(),
+                                    );
                                     let render_result = template.render(base_globals);
                                     if render_result.is_err() {
                                         error!("{}", render_result.err().unwrap());
@@ -428,9 +458,6 @@ impl Site {
                 }
             }
         }
-
-
-
     }
 
     fn _gen_site_tree_object(&self, node: NodeRef) -> (Option<SiteTreeObject>, SiteTreeObjectType) {
@@ -481,12 +508,12 @@ impl Site {
 
                 (Some(serde_yaml::Value::Mapping(object)), object_type)
             }
-            PageFile { page, .. } => {
-                (
-                    Some(serde_yaml::Value::String(page.borrow().get_page_id().clone())),
-                    SiteTreeObjectType::Page,
-                )
-            }
+            PageFile { page, .. } => (
+                Some(serde_yaml::Value::String(
+                    page.borrow().get_page_id().clone(),
+                )),
+                SiteTreeObjectType::Page,
+            ),
             _ => (None, SiteTreeObjectType::Unknown),
         }
     }
@@ -510,22 +537,23 @@ impl Site {
             let mut kind_to_vec = serde_yaml::Mapping::new();
             for (kind, pages) in v.iter() {
                 let mut seq = serde_yaml::Sequence::new();
-                seq.extend(pages.borrow().iter().map(|x| {
-                    serde_yaml::Value::String(x.borrow().get_page_id().clone())
-                }));
+                seq.extend(
+                    pages
+                        .borrow()
+                        .iter()
+                        .map(|x| serde_yaml::Value::String(x.borrow().get_page_id().clone())),
+                );
                 kind_to_vec.insert(
                     serde_yaml::Value::String(kind.clone()),
-                    serde_yaml::Value::Sequence(seq)
+                    serde_yaml::Value::Sequence(seq),
                 );
             }
             kind_to_vec.insert(
                 serde_yaml::Value::String("_keys".to_string()),
-                serde_yaml::Value::Sequence(serde_yaml::Sequence::from_iter(
-                    v.keys().map(|x| {
-                        // debug!("{}", x.clone());
-                        serde_yaml::Value::String(x.clone())
-                    })
-                ))
+                serde_yaml::Value::Sequence(serde_yaml::Sequence::from_iter(v.keys().map(|x| {
+                    // debug!("{}", x.clone());
+                    serde_yaml::Value::String(x.clone())
+                }))),
             );
             taxo_to_kind.insert(
                 serde_yaml::Value::String(taxo.clone()),
@@ -534,9 +562,11 @@ impl Site {
         }
         taxo_to_kind.insert(
             serde_yaml::Value::String("_keys".to_string()),
-            serde_yaml::Value::Sequence(serde_yaml::Sequence::from_iter(self.taxonomies.keys().map(|x| {
-                serde_yaml::Value::String(x.clone())
-            })))
+            serde_yaml::Value::Sequence(serde_yaml::Sequence::from_iter(
+                self.taxonomies
+                    .keys()
+                    .map(|x| serde_yaml::Value::String(x.clone())),
+            )),
         );
 
         self.taxo_object = Some(serde_yaml::Value::Mapping(taxo_to_kind));
@@ -545,8 +575,9 @@ impl Site {
     fn _gen_id_to_page_object(&self) -> serde_yaml::Value {
         let mut obj = serde_yaml::Mapping::new();
         for (k, v) in self.id_to_page.iter() {
-            obj.insert(serde_yaml::Value::String(k.clone()),
-                       serde_yaml::Value::Mapping(v.borrow().get_page_config_object())
+            obj.insert(
+                serde_yaml::Value::String(k.clone()),
+                serde_yaml::Value::Mapping(v.borrow().get_page_config_object()),
             );
         }
         serde_yaml::Value::Mapping(obj)

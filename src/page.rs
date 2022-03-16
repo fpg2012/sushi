@@ -25,7 +25,11 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn new(front_matter: HashMap<String, serde_yaml::Value>, url: String, path: PathBuf) -> Self {
+    pub fn new(
+        front_matter: HashMap<String, serde_yaml::Value>,
+        url: String,
+        path: PathBuf,
+    ) -> Self {
         // get or gen date
         let date = if let Some(serde_yaml::Value::String(date)) = front_matter.get("date") {
             match chrono::DateTime::parse_from_rfc3339(date) {
@@ -121,7 +125,10 @@ impl Page {
                 );
             }
         }
-        config.insert("path".to_string(), serde_yaml::Value::String(self.path.to_string_lossy().to_string()));
+        config.insert(
+            "path".to_string(),
+            serde_yaml::Value::String(self.path.to_string_lossy().to_string()),
+        );
         config
     }
 
@@ -150,7 +157,10 @@ impl Page {
     }
 
     pub fn paginate_info(&self) -> Option<(String, usize)> {
-        match (self.front_matter.get("paginate"), self.front_matter.get("paginate_batch")) {
+        match (
+            self.front_matter.get("paginate"),
+            self.front_matter.get("paginate_batch"),
+        ) {
             (Some(serde_yaml::Value::String(exp)), Some(serde_yaml::Value::Number(num))) => {
                 if num.is_u64() {
                     Some((exp.clone(), num.as_u64().unwrap() as usize))
