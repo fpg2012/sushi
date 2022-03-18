@@ -1,5 +1,5 @@
 [package]
-name = "sushi"
+name = "sushi-gen"
 description="A simple but customizable static site generator / blog generator"
 version = "0.2.0"
 edition = "2021"
