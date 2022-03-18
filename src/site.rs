@@ -739,8 +739,12 @@ impl Site {
                     if ext == "liquid" {
                         let (fm, real_content) = extract_front_matter(&entry.path());
                         let template = parser
-                            .parse(real_content.as_str())
-                            .expect("compiler template faild");
+                            .parse(real_content.as_str());
+                        if let Err(e) = template {
+                            error!("{}", e);
+                            panic!("compile template error");
+                        }
+                        let template = template.unwrap();
                         let layout = Layout::new(fm, template);
                         templates.insert(
                             entry
