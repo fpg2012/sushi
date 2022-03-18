@@ -42,9 +42,9 @@ pub enum SiteTreeNode {
 
 enum SiteTreeObjectType {
     Unknown,
-    Dir(String),                                 // dir name
-    DirWithIndexPage(String, serde_yaml::Value), // dir name, page object
-    Page,
+    Dir(String),                                          // dir name
+    DirWithIndexPage(String, serde_yaml::Value, PageRef), // dir name, page object
+    Page(PageRef),
 }
 
 pub struct Site {
@@ -181,7 +181,11 @@ impl Site {
         // gen all_pages object
         // sort all_pages
         self.pages
-            .sort_by(|a, b| a.borrow().date().cmp(b.borrow().date()));
+            .sort_by(|a, b| match a.borrow().date().cmp(b.borrow().date()) {
+                std::cmp::Ordering::Greater => std::cmp::Ordering::Less,
+                std::cmp::Ordering::Less => std::cmp::Ordering::Greater,
+                std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
+            });
         let all_pages_object = self._gen_all_pages_object();
         self.all_pages_object = Some(all_pages_object);
 
@@ -256,7 +260,11 @@ impl Site {
                 .collect_vec();
             // sort according to date
             // TODO: add more criteria for flexibility
-            list.sort_by(|a, b| a.borrow().date().cmp(b.borrow().date()));
+            list.sort_by(|a, b| match a.borrow().date().cmp(b.borrow().date()) {
+                std::cmp::Ordering::Greater => std::cmp::Ordering::Less,
+                std::cmp::Ordering::Less => std::cmp::Ordering::Greater,
+                std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
+            });
             for (i, n) in list.iter().enumerate() {
                 if i as i64 - 1 >= 0 {
                     if let Some(p) = list.get(i - 1) {
@@ -467,7 +475,8 @@ impl Site {
                 path,
                 index,
             } => {
-                let mut list = serde_yaml::Sequence::new();
+                let mut list = vec![];
+                // serde_yaml::Sequence::new()
                 let mut object = serde_yaml::Mapping::new();
                 for child in children.iter() {
                     let (child_object, child_type) = self._gen_site_tree_object(child.clone());
@@ -478,19 +487,28 @@ impl Site {
                                 child_object.clone().unwrap(),
                             );
                         }
-                        SiteTreeObjectType::DirWithIndexPage(dirname, page) => {
+                        SiteTreeObjectType::DirWithIndexPage(dirname, page, node) => {
                             object.insert(
                                 serde_yaml::Value::from(dirname),
                                 child_object.clone().unwrap(),
                             );
-                            list.push(page);
+                            list.push((page, node.clone()));
                         }
-                        SiteTreeObjectType::Page => {
-                            list.push(child_object.clone().unwrap());
+                        SiteTreeObjectType::Page(node) => {
+                            list.push((child_object.clone().unwrap(), node.clone()));
                         }
                         _ => (),
                     }
                 }
+                list.sort_by(|a, b| {
+                    let ((_, a_), (_, b_)) = (a, b);
+                    match a_.clone().borrow().date().cmp(b_.clone().borrow().date()) {
+                        std::cmp::Ordering::Greater => std::cmp::Ordering::Less,
+                        std::cmp::Ordering::Less => std::cmp::Ordering::Greater,
+                        std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
+                    }
+                });
+                let list = list.iter().map(|(a, b)| a.clone()).collect_vec();
                 object.insert(
                     serde_yaml::Value::from("_list"),
                     serde_yaml::Value::from(list),
@@ -500,7 +518,8 @@ impl Site {
                 } else if let Some(page) = index {
                     SiteTreeObjectType::DirWithIndexPage(
                         path.file_stem().unwrap().to_string_lossy().to_string(),
-                        serde_yaml::Value::Mapping(page.borrow().get_page_config_object()),
+                        serde_yaml::Value::String(page.borrow().get_page_id().clone()),
+                        page.clone(),
                     )
                 } else {
                     SiteTreeObjectType::Dir(path.file_stem().unwrap().to_string_lossy().to_string())
@@ -512,7 +531,7 @@ impl Site {
                 Some(serde_yaml::Value::String(
                     page.borrow().get_page_id().clone(),
                 )),
-                SiteTreeObjectType::Page,
+                SiteTreeObjectType::Page(page.clone()),
             ),
             _ => (None, SiteTreeObjectType::Unknown),
         }
