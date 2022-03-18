@@ -425,6 +425,18 @@ impl Site {
                                 "current_batch_num".parse().unwrap(),
                                 liquid::model::to_value(&i).unwrap(),
                             );
+                            if i > 0 {
+                                paginator_object.insert(
+                                    "last_batch_num".parse().unwrap(),
+                                    liquid::model::to_value(&(i-1)).unwrap(),
+                                );
+                            }
+                            if i < batch_urls.len() - 1 {
+                                paginator_object.insert(
+                                    "next_batch_num".parse().unwrap(),
+                                    liquid::model::to_value(&(i+1)).unwrap(),
+                                );
+                            }
                             if let Some(Value::String(layout_str)) = layout {
                                 debug!("try to use layout {}", layout_str);
                                 let mut current_layout = layout_str;
