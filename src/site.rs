@@ -430,12 +430,16 @@ impl Site {
                                     "last_batch_num".parse().unwrap(),
                                     liquid::model::to_value(&(i-1)).unwrap(),
                                 );
+                            } else {
+                                paginator_object.remove("last_batch_num");
                             }
                             if i < batch_urls.len() - 1 {
                                 paginator_object.insert(
                                     "next_batch_num".parse().unwrap(),
                                     liquid::model::to_value(&(i+1)).unwrap(),
                                 );
+                            } else {
+                                paginator_object.remove("next_batch_num");
                             }
                             if let Some(Value::String(layout_str)) = layout {
                                 debug!("try to use layout {}", layout_str);
