@@ -99,9 +99,9 @@ sushi-theme-letter
 
 Actually only `_converters`, `_includes`, `_templates` and `_site.yml` are necessary and should NOT be renamed.  Once sushi starts, it reads these files and folders first and load them into memory.
 
-Templates (written in liquid template language) and partials (in liquid too) should be stored in `_templates` and `_includes` respectively. Site configurations are written in `_site.yml`. `_converters` stores executables for converting page files into HTML pages (i.e. markdown parsers).
+Templates (written in liquid template language) and partials (in liquid too) should be stored in `_templates` and `_includes` respectively. Site configurations are written in `_site.yml`. `_converters` stores executables for converting page files into HTML pages (e.g. markdown parsers).
 
-> Note that sūshì does not parse markdown (or any other format) directly, what it does is simply compiling templates you provide and insert the converted page contents into them. You can write your parser, or write a simple script to execute some parser (i.e. **pandoc**).
+> Note that sūshì does not parse markdown (or any other format) directly, what it does is simply compiling templates you provide and insert the converted page contents into them. You can write your parser, or write a simple script to execute some parser (e.g. **pandoc**).
 
 After reading these important configurations, sushi convert all pages found by execute the converters. Folders and file start with `.` or `_` will be ignored. All file that are not recognized as "page files" will be copied directly to the corresponding locations.
 
