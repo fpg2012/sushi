@@ -50,7 +50,7 @@ fn initialize_site(site_name: &String, theme: &PathBuf, path: &PathBuf) {
     let original_theme = theme;
     let mut theme = theme.clone();
     if !theme.exists() {
-        if let Some(project_dir) = directories::ProjectDirs::from("io", "github", "sushi") {
+        if let Some(project_dir) = directories::ProjectDirs::from("io", "github", "sushi-gen") {
             let mut theme_dir = PathBuf::from(project_dir.config_dir());
             theme_dir.push(theme.clone());
             if theme_dir.exists() {
