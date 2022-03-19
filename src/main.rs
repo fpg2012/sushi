@@ -10,8 +10,6 @@ use crate::site::Site;
 use clap::Parser;
 use log::{error, info};
 use simple_logger::SimpleLogger;
-use std::fs;
-use std::fs::read_dir;
 use std::path::PathBuf;
 
 #[derive(clap::Parser)]
@@ -68,25 +66,19 @@ fn initialize_site(site_name: &String, theme: &PathBuf, path: &PathBuf) {
     if !&theme.is_dir() {
         error!("{:?} is not a valid directory", theme);
     }
-    sushi_init_copy(&theme, &path);
-    info!("{:?} created", path.clone());
-}
-
-fn sushi_init_copy(from: &PathBuf, to: &PathBuf) {
-    if from.is_dir() {
-        info!("[gen] {:?}", &to);
-        fs::create_dir(to.clone()).unwrap();
-        for entry in read_dir(from).unwrap() {
-            let mut to2 = to.clone();
-            let from = entry.unwrap().path();
-            to2.push(&from.file_stem().unwrap());
-            sushi_init_copy(&from, &to2)
+    // sushi_init_copy(&theme, &path);
+    let mut copy_options = fs_extra::dir::CopyOptions::new();
+    copy_options.copy_inside = true;
+    let result = fs_extra::dir::copy(&theme, &path, &copy_options);
+    match result {
+        Ok(_) => {
+            info!("[copy] from {:?}", &theme);
+            info!("{:?} created", path.clone());
         }
-    } else if from.is_file() {
-        info!("[copy] {:?}", &to);
-        fs::copy(from, to).unwrap();
-    } else {
-        panic!("Unknown file type");
+        Err(e) => {
+            error!("cannot copy from {:?}, error: {}", &theme, e);
+            panic!();
+        }
     }
 }
 

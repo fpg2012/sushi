@@ -402,8 +402,10 @@ impl Site {
                     dest_path.clone(),
                 ) {
                     Ok(p) => {
-                        fs::remove_dir(p.base_url_dir());
-                        fs::create_dir(p.base_url_dir());
+                        fs::remove_dir(p.base_url_dir())
+                            .unwrap_or(trace!("cannot remove {:?}", p.base_url_dir()));
+                        fs::create_dir(p.base_url_dir())
+                            .unwrap_or(trace!("cannot create {:?}", p.base_url_dir()));
                         let mut rendered = converted;
                         let mut paginator_object = p.gen_paginator_object();
                         let batch_urls = p
@@ -428,7 +430,7 @@ impl Site {
                             if i > 0 {
                                 paginator_object.insert(
                                     "last_batch_num".parse().unwrap(),
-                                    liquid::model::to_value(&(i-1)).unwrap(),
+                                    liquid::model::to_value(&(i - 1)).unwrap(),
                                 );
                             } else {
                                 paginator_object.remove("last_batch_num");
@@ -436,7 +438,7 @@ impl Site {
                             if i < batch_urls.len() - 1 {
                                 paginator_object.insert(
                                     "next_batch_num".parse().unwrap(),
-                                    liquid::model::to_value(&(i+1)).unwrap(),
+                                    liquid::model::to_value(&(i + 1)).unwrap(),
                                 );
                             } else {
                                 paginator_object.remove("next_batch_num");
@@ -524,7 +526,7 @@ impl Site {
                         std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
                     }
                 });
-                let list = list.iter().map(|(a, b)| a.clone()).collect_vec();
+                let list = list.iter().map(|(a, _)| a.clone()).collect_vec();
                 object.insert(
                     serde_yaml::Value::from("_list"),
                     serde_yaml::Value::from(list),
@@ -754,8 +756,7 @@ impl Site {
                 if let Some(ext) = entry.path().extension() {
                     if ext == "liquid" {
                         let (fm, real_content) = extract_front_matter(&entry.path());
-                        let template = parser
-                            .parse(real_content.as_str());
+                        let template = parser.parse(real_content.as_str());
                         if let Err(e) = template {
                             error!("{}", e);
                             panic!("compile template error");
