@@ -1,3 +1,5 @@
+[中文README](https://github.com/fpg2012/sushi/blob/main/README.zh.md)
+
 # sūshì
 
 Sūshì is a simple but customizable static site generator / blog generator written in Rust.
@@ -99,9 +101,9 @@ sushi-theme-letter
 
 Actually only `_converters`, `_includes`, `_templates` and `_site.yml` are necessary and should NOT be renamed.  Once sushi starts, it reads these files and folders first and load them into memory.
 
-Templates (written in liquid template language) and partials (in liquid too) should be stored in `_templates` and `_includes` respectively. Site configurations are written in `_site.yml`. `_converters` stores executables for converting page files into HTML pages (e.g. markdown parsers).
+Templates (written in liquid template language) and partials (in liquid too) should be stored in `_templates` and `_includes` respectively. Site configurations are written in `_site.yml`. `_converters` stores executables for converting page files into HTML pages (i.e. markdown parsers).
 
-> Note that sūshì does not parse markdown (or any other format) directly, what it does is simply compiling templates you provide and insert the converted page contents into them. You can write your parser, or write a simple script to execute some parser (e.g. **pandoc**).
+> Note that sūshì does not parse markdown (or any other format) directly, what it does is simply compiling templates you provide and insert the converted page contents into them. You can write your parser, or write a simple script to execute some parser (i.e. **pandoc**).
 
 After reading these important configurations, sushi convert all pages found by execute the converters. Folders and file start with `.` or `_` will be ignored. All file that are not recognized as "page files" will be copied directly to the corresponding locations.
 
@@ -264,15 +266,15 @@ test
 └─10.html
 ```
 
-| name                          | usage                      |
-| ----------------------------- | -------------------------- |
-| `paginator.current_batch`     | current batch              |
-| `paginator.current_batch_num` | number id of current batch |
-| `paginator.next_batch_num`    | number id of next batch    |
-| `paginator.last_batch_num`    | number id of  last batch   |
-| `paginator.batch_urls`        | list of batch urls         |
-| `paginator.items`             | the list before splitting  |
-| `paginator.batch_num`         | number of batches          |
+| name                          | usage                     |
+| ----------------------------- | ------------------------- |
+| `paginator.current_batch`     | current batch             |
+| `paginator.current_batch_num` | index of current batch    |
+| `paginator.next_batch_num`    | index of next batch       |
+| `paginator.last_batch_num`    | index of  last batch      |
+| `paginator.batch_urls`        | list of batch urls        |
+| `paginator.items`             | the list before splitting |
+| `paginator.batch_num`         | number of batches         |
 
 ### Write Converters
 
