@@ -58,6 +58,7 @@ pub struct Site {
 
     convert_ext: HashSet<String>,
     converter_choice: HashMap<String, String>,
+    convert_to_ext: HashMap<String, String>,
     taxonomies: HashMap<String, HashMap<String, RefCell<Vec<PageRef>>>>,
     pages: Vec<PageRef>,
     id_to_page: HashMap<String, PageRef>,
@@ -136,7 +137,7 @@ impl Site {
         let mut gen_dir = site_dir.clone();
         gen_dir.push("_gen");
 
-        let (convert_ext, converter_choice, taxonomies) = Self::_extract_important_config(&config);
+        let (convert_ext, converter_choice, convert_to_ext, taxonomies) = Self::_extract_important_config(&config);
         debug!("{:?}", convert_ext);
         debug!("{:?}", converter_choice);
         debug!("{:?}", taxonomies);
@@ -151,6 +152,7 @@ impl Site {
             site_tree: None,
             convert_ext,
             converter_choice,
+            convert_to_ext,
             taxonomies,
             pages: vec![],
             id_to_page: HashMap::new(),
@@ -205,7 +207,7 @@ impl Site {
     fn _generate(&self, current_node: NodeRef, mut globals: liquid::Object) -> liquid::Object {
         match &mut *current_node.clone().borrow_mut() {
             SiteTreeNode::NormalDir { children, path, .. } => {
-                let dest_path = self._get_dest_path(path, false);
+                let dest_path = self._get_dest_path(path, false, None);
                 info!("[mkdir]  {:?}", dest_path);
                 fs::create_dir_all(dest_path).expect("cannot create dir");
                 let mut globals = globals;
@@ -220,7 +222,7 @@ impl Site {
                 globals
             }
             SiteTreeNode::StaticFile { path } => {
-                let dest_path = self._get_dest_path(path, false);
+                let dest_path = self._get_dest_path(path, false, None);
                 info!("[copy]  {}", path.clone().to_string_lossy());
                 fs::copy(path.clone(), dest_path).unwrap();
                 globals
@@ -285,9 +287,22 @@ impl Site {
         } else if path.is_file() {
             // check whether it is page file by extension name
             if self.check_page(path) {
+                let ext = path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
                 let (fm, _) = extract_front_matter(path);
-                let url = self.get_page_url(path);
-                let page = Rc::new(RefCell::new(Page::new(fm, url, path.clone())));
+
+                // get expected extension name
+                let to_ext = match fm.get("to_ext") {
+                    Some(Value::String(t_e)) => t_e.clone(),
+                    _ => {
+                        match self.convert_to_ext.get("ext") {
+                            Some(t_e) => t_e.clone(),
+                            _ => "html".to_string()
+                        }
+                    }
+                };
+
+                let url = self.get_page_url(path, to_ext.clone());
+                let page = Rc::new(RefCell::new(Page::new(fm, url, path.clone(), Some(to_ext))));
                 // check whether page_id is unique
                 let page_id = page.borrow().get_page_id().clone();
                 if self.id_to_page.contains_key(&page_id) {
@@ -339,7 +354,7 @@ impl Site {
     }
 
     pub fn gen_page(&self, path: &PathBuf, page: PageRef, base_globals: &mut liquid::Object) {
-        let dest_path = self._get_dest_path(path, true);
+        let dest_path = self._get_dest_path(path, true, page.borrow().to_ext.clone());
         let (_, content) = extract_front_matter(path);
 
         let mut converted = content;
@@ -411,7 +426,7 @@ impl Site {
                         let batch_urls = p
                             .batch_paths()
                             .iter()
-                            .map(|x| self.get_page_url_from_dest(x))
+                            .map(|x| self._get_batch_url_from_dest(x))
                             .collect_vec();
                         paginator_object.insert(
                             "batch_urls".parse().unwrap(),
@@ -628,20 +643,20 @@ impl Site {
         serde_yaml::Value::Sequence(obj)
     }
 
-    pub fn get_page_url(&self, path: &PathBuf) -> String {
+    pub fn get_page_url(&self, path: &PathBuf, to_ext: String) -> String {
         let mut temp = PathBuf::from(path.strip_prefix(&self.site_dir).unwrap());
         let stem = temp.clone();
         let stem = stem.file_stem().unwrap();
         temp.pop();
         temp.push(stem);
         if let Some(s) = &self.site_url {
-            s.to_string() + "/" + temp.to_str().unwrap() + ".html"
+            s.to_string() + "/" + temp.to_str().unwrap() + "." + to_ext.as_str()
         } else {
-            String::from("/") + temp.to_str().unwrap() + ".html"
+            String::from("/") + temp.to_str().unwrap() + "." + to_ext.as_str()
         }
     }
 
-    pub fn get_page_url_from_dest(&self, path: &PathBuf) -> String {
+    fn _get_batch_url_from_dest(&self, path: &PathBuf) -> String {
         let mut temp = PathBuf::from(path.strip_prefix(&self.gen_dir).unwrap());
         let stem = temp.clone();
         let stem = stem.file_stem().unwrap();
@@ -660,11 +675,13 @@ impl Site {
         temp
     }
 
-    fn _get_dest_path(&self, path: &PathBuf, is_page: bool) -> PathBuf {
+    fn _get_dest_path(&self, path: &PathBuf, is_page: bool, to_ext: Option<String>) -> PathBuf {
         let mut dest = PathBuf::from(&self.gen_dir);
         dest.push(path.strip_prefix(&self.site_dir).unwrap());
         if is_page {
-            dest.set_extension("html");
+            if let Some(ext) = to_ext {
+                dest.set_extension(ext);
+            }
         }
         dest
     }
@@ -673,6 +690,7 @@ impl Site {
         config: &HashMap<String, Value>,
     ) -> (
         HashSet<String>,
+        HashMap<String, String>,
         HashMap<String, String>,
         HashMap<String, HashMap<String, RefCell<Vec<PageRef>>>>,
     ) {
@@ -696,6 +714,15 @@ impl Site {
             }
         }
 
+        let mut convert_to_ext = HashMap::new();
+        if let Some(Value::Mapping(to_ext)) = config.get("convert_to_ext") {
+            for (f, t) in to_ext.iter() {
+                if let (Value::String(ext), Value::String(t_ext)) = (f, t) {
+                    convert_to_ext.insert(ext.clone(), t_ext.clone());
+                }
+            }
+        }
+
         let mut taxonomies = HashMap::new();
         if let Some(Value::Sequence(taxo)) = config.get("taxonomies") {
             taxonomies.extend(taxo.iter().filter_map(|x| {
@@ -706,7 +733,7 @@ impl Site {
                 }
             }));
         }
-        (convert_ext, converter_choice, taxonomies)
+        (convert_ext, converter_choice, convert_to_ext, taxonomies)
     }
 
     fn _parse_config_file(path: PathBuf) -> HashMap<String, Value> {

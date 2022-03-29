@@ -22,6 +22,7 @@ pub struct Page {
     next: Option<PageRef>,
     last: Option<PageRef>,
     page_id: PageId,
+    pub to_ext: Option<String>,
 }
 
 impl Page {
@@ -29,6 +30,7 @@ impl Page {
         front_matter: HashMap<String, serde_yaml::Value>,
         url: String,
         path: PathBuf,
+        to_ext: Option<String>,
     ) -> Self {
         // get or gen date
         let date = if let Some(serde_yaml::Value::String(date)) = front_matter.get("date") {
@@ -69,6 +71,7 @@ impl Page {
             last: None,
             page_id,
             path,
+            to_ext,
         }
     }
 
