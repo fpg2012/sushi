@@ -247,7 +247,10 @@ impl Site {
                         continue;
                     }
                     let (child, index_) = self._gen_site_tree(&entry.path());
-                    index = index_;
+                    match &*child.borrow() {
+                        PageFile { .. } => index = index_,
+                        _ => (),
+                    }
                     children.push(child);
                 }
             }
@@ -346,11 +349,9 @@ impl Site {
     }
 
     fn check_index(&self, path: &PathBuf) -> bool {
-        path.file_stem()
-            .unwrap_or(OsStr::new(""))
-            .to_string_lossy()
-            .to_string()
-            == "index"
+        let filename = path.file_stem().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
+        let ext = path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
+        filename == "index" && self.convert_ext.get(ext.as_str()) != None
     }
 
     pub fn gen_page(&self, path: &PathBuf, page: PageRef, base_globals: &mut liquid::Object) {
@@ -549,6 +550,7 @@ impl Site {
                 let object_type = if path == Path::new(".") {
                     SiteTreeObjectType::Dir("_home".to_string())
                 } else if let Some(page) = index {
+                    debug!("with index: {}", path.file_stem().unwrap().to_string_lossy().to_string());
                     SiteTreeObjectType::DirWithIndexPage(
                         path.file_stem().unwrap().to_string_lossy().to_string(),
                         serde_yaml::Value::String(page.borrow().get_page_id().clone()),
