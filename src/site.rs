@@ -325,7 +325,7 @@ impl Site {
                 let to_ext = match fm.get("to_ext") {
                     Some(Value::String(t_e)) => t_e.clone(),
                     _ => {
-                        match self.convert_to_ext.get("ext") {
+                        match self.convert_to_ext.get(&ext.clone()) {
                             Some(t_e) => t_e.clone(),
                             _ => "html".to_string()
                         }
@@ -905,8 +905,8 @@ impl Site {
                 None
             }
         } else {
-            error!("unknown type");
-            panic!();
+            info!("cannot scan {}", &path.to_string_lossy());
+            None
         }
     }
 
@@ -925,7 +925,7 @@ impl Site {
         if let Some(et) = self.lookup_existing_tree(dest_path) {
             // check time
             match &*et.clone().borrow() {
-                File { path, timestamp } => {
+                File { path: _, timestamp } => {
                     if timestamp < src_timestamp {
                         true
                     } else {

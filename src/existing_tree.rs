@@ -4,7 +4,6 @@ use std::rc::Rc;
 use std::time::SystemTime;
 
 pub type ETNodeRef = Rc<RefCell<ExistingTreeNode>>;
-type ExistingTree = ExistingTreeNode;
 
 #[derive(Debug)]
 pub enum ExistingTreeNode {
