@@ -5,6 +5,7 @@ mod layout;
 mod page;
 mod paginator;
 mod site;
+mod existing_tree;
 
 use crate::site::Site;
 use clap::Parser;
@@ -19,8 +20,6 @@ struct Cli {
     debug: bool,
     #[clap(long, short = 'q')]
     quiet: bool,
-    #[clap(long, short = 'A')]
-    regen_all: bool,
     #[clap(subcommand)]
     commands: Command,
 }
@@ -35,7 +34,10 @@ enum Command {
         #[clap(long, default_value = ".")]
         path: PathBuf,
     },
-    Build,
+    Build {
+        #[clap(long, short = 'A')]
+        regen_all: bool,
+    }
 }
 
 fn initialize_site(site_name: &String, theme: &PathBuf, path: &PathBuf) {
@@ -100,8 +102,8 @@ fn main() {
         } => {
             initialize_site(site_name, theme, path);
         }
-        Command::Build => {
-            let mut site = Site::parse_site_dir(".".into());
+        Command::Build { regen_all } => {
+            let mut site = Site::parse_site_dir(".".into(), regen_all.clone());
             site.generate_site();
         }
     }
