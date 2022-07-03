@@ -1,7 +1,7 @@
 [package]
 name = "sushi-gen"
 description="A simple but customizable static site generator / blog generator"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 license="LGPL-3.0"
 keywords=["static", "site", "generator", "blog"]
@@ -15,16 +15,16 @@ name="ssushi"
 path="src/main.rs"
 
 [dependencies]
-liquid = "0.24.0"
+liquid = "0.25.1"
 serde = "1.0"
 serde_yaml = "0.8"
-subprocess = "0.2.8"
+subprocess = "0.2.9"
 lazy_static = "1.4.0"
 itertools = "0.10.3"
-log = "0.4.14"
+log = "0.4.17"
 simple_logger = "2.1.0"
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { version = "3.2.8", features = ["derive"] }
 chrono = "0.4"
 directories = "4.0.1"
-regex = "1.5.5"
+regex = "1.5.6"
 fs_extra = "1.2.0"
