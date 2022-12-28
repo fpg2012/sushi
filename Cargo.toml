@@ -29,5 +29,6 @@ regex = "1.7.0"
 fs_extra = "1.2.0"
 
 [dependencies.simple_logger]
+version = "4.0.0"
 default-features = false
 features = ["colors"]
