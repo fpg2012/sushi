@@ -1,12 +1,12 @@
 [package]
 name = "sushi-gen"
 description="A simple but customizable static site generator / blog generator"
-version = "0.2.7"
+version = "0.2.8"
 edition = "2021"
-license="LGPL-3.0"
-keywords=["static", "site", "generator", "blog"]
-categories=["command-line-utilities"]
-repository="https://github.com/fpg2012/sushi"
+license = "LGPL-3.0"
+keywords = ["static", "site", "generator", "blog"]
+categories = ["command-line-utilities"]
+repository = "https://github.com/fpg2012/sushi"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -15,16 +15,19 @@ name="ssushi"
 path="src/main.rs"
 
 [dependencies]
-liquid = "0.25.1"
+liquid = "0.26.0"
 serde = "1.0"
-serde_yaml = "0.8"
+serde_yaml = "0.9.16"
 subprocess = "0.2.9"
 lazy_static = "1.4.0"
-itertools = "0.10.3"
+itertools = "0.10.5"
 log = "0.4.17"
-simple_logger = "2.1.0"
-clap = { version = "3.2.8", features = ["derive"] }
-chrono = "0.4"
+clap = { version = "4.0.32", features = ["derive"] }
+chrono = "0.4.23"
 directories = "4.0.1"
-regex = "1.5.6"
+regex = "1.7.0"
 fs_extra = "1.2.0"
+
+[dependencies.simple_logger]
+default-features = false
+features = ["colors"]

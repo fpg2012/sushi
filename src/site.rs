@@ -80,31 +80,45 @@ pub struct Site {
     regen_all: bool,
 }
 
+pub struct SiteConfigs {
+    pub config: String,
+    pub gen: Option<String>,
+    pub converters: Option<String>,
+    pub includes: Option<String>,
+    pub templates: Option<String>,
+}
+
 impl Site {
-    pub fn parse_site_dir(site_dir: PathBuf, regen_all: bool) -> Self {
+    pub fn parse_site_dir(site_dir: PathBuf, regen_all: bool, site_configs: SiteConfigs) -> Self {
         // search for _site.yml
         let temp_config = fs::read_dir(site_dir.clone())
             .expect("cannot open site directory.")
             .find(|x| {
                 if let Ok(file) = x {
-                    file.file_name() == OsString::from("_site.yml") && file.path().is_file()
+                    file.file_name() == OsString::from(&site_configs.config) && file.path().is_file()
                 } else {
                     false
                 }
             })
-            .expect("cannot find configuration file: _site.yml")
+            .expect(format!{"cannot find configuration file: {}", &site_configs.config}.as_str())
             .unwrap();
         let config = Self::_parse_config_file(temp_config.path());
-        let site_url = if let Some(serde_yaml::Value::String(s)) = config.get("url") {
-            Some(s.clone())
-        } else {
-            None
-        };
+
+        let site_url = Self::_string_from_config("url", &config);
+        let site_gen_dir = Self::_string_from_config("gen_dir", &config);
+        let site_converters_dir = Self::_string_from_config("converters_dir", &config);
+        let site_templates_dir = Self::_string_from_config("templates_dir", &config);
+        let site_includes_dir = Self::_string_from_config("includes_dir", &config);
+
+        let _gen_dir = Self::_decide_site_config(site_configs.gen.clone(), site_gen_dir, "_gen".to_string());
+        let _converters_dir = Self::_decide_site_config(site_configs.gen.clone(), site_converters_dir, "_converters".to_string());
+        let _templates_dir = Self::_decide_site_config(site_configs.gen.clone(), site_templates_dir, "_templates".to_string());
+        let _includes_dir = Self::_decide_site_config(site_configs.gen.clone(), site_includes_dir, "_includes".to_string());
 
         // search for _includes
         let temp_includes = fs::read_dir(site_dir.clone()).unwrap().find(|x| {
             if let Ok(file) = x {
-                file.file_name() == OsString::from("_includes") && file.path().is_dir()
+                file.file_name() == OsString::from(&_includes_dir) && file.path().is_dir()
             } else {
                 false
             }
@@ -121,7 +135,7 @@ impl Site {
             .unwrap()
             .find(|x| {
                 if let Ok(file) = x {
-                    file.file_name() == OsString::from("_templates") && file.path().is_dir()
+                    file.file_name() == OsString::from(&_templates_dir) && file.path().is_dir()
                 } else {
                     false
                 }
@@ -135,7 +149,7 @@ impl Site {
             .unwrap()
             .find(|x| {
                 if let Ok(file) = x {
-                    file.file_name() == OsString::from("_converters") && file.path().is_dir()
+                    file.file_name() == OsString::from(&_converters_dir) && file.path().is_dir()
                 } else {
                     false
                 }
@@ -146,7 +160,7 @@ impl Site {
 
         // parse dir
         let mut gen_dir = site_dir.clone();
-        gen_dir.push("_gen");
+        gen_dir.push(_gen_dir);
         let existing_map = Rc::new(RefCell::new(HashMap::new()));
         let existing_tree = Self::_parse_gen(&gen_dir, existing_map.clone());
         debug!("{:?}", &existing_map);
@@ -937,6 +951,27 @@ impl Site {
             }
         } else {
             true
+        }
+    }
+
+    fn _string_from_config(key: &str, config: &HashMap<String, serde_yaml::Value>) -> Option<String> {
+        if let Some(serde_yaml::Value::String(s)) = config.get(key) {
+            Some(s.clone())
+        } else {
+            None
+        }
+    }
+
+    fn _decide_site_config(cli_config: Option<String>, yml_config: Option<String>, default_config: String) -> String {
+        // command line configuration is prior to _site.yml configuration
+        if let Some(cli_str) = cli_config {
+            cli_str
+        } else {
+            if let Some(yml_str) = yml_config {
+                yml_str
+            } else {
+                default_config
+            }
         }
     }
 }

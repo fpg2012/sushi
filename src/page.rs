@@ -42,7 +42,7 @@ impl Page {
                         Ok(date) => Local
                             .from_local_datetime(&NaiveDateTime::new(
                                 date,
-                                NaiveTime::from_hms(0, 0, 0),
+                                NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
                             ))
                             .unwrap(),
                         Err(_) => DateTime::<Local>::from(SystemTime::now()),

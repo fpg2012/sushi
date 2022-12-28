@@ -7,7 +7,7 @@ mod paginator;
 mod site;
 mod existing_tree;
 
-use crate::site::Site;
+use crate::site::{Site, SiteConfigs};
 use clap::Parser;
 use log::{error, info};
 use simple_logger::SimpleLogger;
@@ -37,6 +37,16 @@ enum Command {
     Build {
         #[clap(long, short = 'A')]
         regen_all: bool,
+        #[clap(long, short = 'c', default_value = "_site.yml")]
+        config: String,
+        #[clap(long, short = 'g')]
+        gen: Option<String>,
+        #[clap(long)]
+        includes: Option<String>,
+        #[clap(long)]
+        converters: Option<String>,
+        #[clap(long)]
+        templates: Option<String>,
     }
 }
 
@@ -102,8 +112,15 @@ fn main() {
         } => {
             initialize_site(site_name, theme, path);
         }
-        Command::Build { regen_all } => {
-            let mut site = Site::parse_site_dir(".".into(), regen_all.clone());
+        Command::Build { regen_all, config, gen, includes, converters, templates } => {
+            let site_configs = SiteConfigs {
+                config: config.clone(),
+                gen: gen.clone(),
+                converters: converters.clone(),
+                includes: includes.clone(),
+                templates: templates.clone(),
+            };
+            let mut site = Site::parse_site_dir(".".into(), regen_all.clone(), site_configs);
             site.generate_site();
         }
     }
