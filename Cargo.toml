@@ -15,20 +15,20 @@ name="ssushi"
 path="src/main.rs"
 
 [dependencies]
-liquid = "0.26.0"
+liquid = "0.26.4"
 serde = "1.0"
-serde_yaml = "0.9.16"
+serde_yaml = "0.9.30"
 subprocess = "0.2.9"
 lazy_static = "1.4.0"
-itertools = "0.10.5"
-log = "0.4.17"
-clap = { version = "4.0.32", features = ["derive"] }
-chrono = "0.4.23"
-directories = "4.0.1"
-regex = "1.7.0"
-fs_extra = "1.2.0"
+itertools = "0.12.0"
+log = "0.4.20"
+clap = { version = "4.4.18", features = ["derive"] }
+chrono = "0.4.31"
+directories = "5.0.1"
+regex = "1.10.2"
+fs_extra = "1.3.0"
 
 [dependencies.simple_logger]
-version = "4.0.0"
+version = "4.3.3"
 default-features = false
 features = ["colors"]
