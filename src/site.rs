@@ -333,7 +333,23 @@ impl Site {
             };
             if self.check_page(path) {
                 let ext = path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
-                let (fm, _) = extract_front_matter(path);
+                let (fm, content) = extract_front_matter(path);
+
+                let fm = match fm {
+                    Some(fm) => fm,
+                    None => {
+                        let mut temp = HashMap::new();
+                        temp.insert(
+                            "to_ext".to_string(),
+                            serde_yaml::Value::from("html")
+                        ); // html by default
+                        temp.insert(
+                            "nolist".to_string(),
+                            serde_yaml::Value::from(true)
+                        ); // nolist by default
+                        temp
+                    }
+                };
 
                 // get expected extension name
                 let to_ext = match fm.get("to_ext") {
@@ -341,13 +357,13 @@ impl Site {
                     _ => {
                         match self.convert_to_ext.get(&ext.clone()) {
                             Some(t_e) => t_e.clone(),
-                            _ => "html".to_string()
+                            _ => "html".to_string() // html by default
                         }
                     }
                 };
 
                 let url = self.get_page_url(path, to_ext.clone());
-                let page = Rc::new(RefCell::new(Page::new(fm, url, path.clone(), Some(to_ext))));
+                let page = Rc::new(RefCell::new(Page::new(fm, url, path.clone(), Some(to_ext), content)));
                 // check whether page_id is unique
                 let page_id = page.borrow().get_page_id().clone();
                 if self.id_to_page.contains_key(&page_id) {
@@ -410,7 +426,8 @@ impl Site {
             return;
         }
 
-        let (_, content) = extract_front_matter(path);
+        //let (_, content) = extract_front_matter(path);
+        let content = page.borrow().content.clone();
 
         let mut converted = content;
         let mut converter_choice = String::new();
@@ -841,6 +858,10 @@ impl Site {
                 if let Some(ext) = entry.path().extension() {
                     if ext == "liquid" {
                         let (fm, real_content) = extract_front_matter(&entry.path());
+                        let fm = match fm {
+                            Some(fm) => fm,
+                            None => HashMap::new(),
+                        };
                         let template = parser.parse(real_content.as_str());
                         if let Err(e) = template {
                             error!("{}", e);

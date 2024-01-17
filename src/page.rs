@@ -23,6 +23,7 @@ pub struct Page {
     last: Option<PageRef>,
     page_id: PageId,
     pub to_ext: Option<String>,
+    pub content: String,
 }
 
 impl Page {
@@ -31,6 +32,7 @@ impl Page {
         url: String,
         path: PathBuf,
         to_ext: Option<String>,
+        content: String,
     ) -> Self {
         // get or gen date
         let date = if let Some(serde_yaml::Value::String(date)) = front_matter.get("date") {
@@ -72,6 +74,7 @@ impl Page {
             page_id,
             path,
             to_ext,
+            content,
         }
     }
 
@@ -128,9 +131,19 @@ impl Page {
                 );
             }
         }
+        if config.get("search_text") == None {
+            config.insert(
+                "search_text".to_string(),
+                serde_yaml::Value::String(self.content.clone())
+            );
+        }
         config.insert(
             "path".to_string(),
             serde_yaml::Value::String(self.path.to_string_lossy().to_string()),
+        );
+        config.insert(
+            "content".to_string(),
+            serde_yaml::Value::String(self.content.clone())
         );
         config
     }

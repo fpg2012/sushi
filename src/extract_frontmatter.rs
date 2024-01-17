@@ -10,7 +10,7 @@ enum ExtractorState {
     OutYaml,
 }
 
-pub fn extract_front_matter(path: &PathBuf) -> (HashMap<String, serde_yaml::Value>, String) {
+pub fn extract_front_matter(path: &PathBuf) -> (Option<HashMap<String, serde_yaml::Value>>, String) {
     let f = File::open(path).expect("cannot open file");
     let f = BufReader::new(f);
     let mut front_matter = String::new();
@@ -18,6 +18,9 @@ pub fn extract_front_matter(path: &PathBuf) -> (HashMap<String, serde_yaml::Valu
     let mut state = ExtractorState::Start;
     let delim = regex::Regex::new(r"^-{3,}\s*$").unwrap();
     let space = regex::Regex::new(r"^\s*$").unwrap();
+    
+    let mut no_fm_flag = false;
+
     for line in f.lines() {
         let line = line.unwrap();
         match state {
@@ -29,6 +32,7 @@ pub fn extract_front_matter(path: &PathBuf) -> (HashMap<String, serde_yaml::Valu
                 } else {
                     content.push_str(&line);
                     content.push('\n');
+                    no_fm_flag = true;
                     ExtractorState::OutYaml
                 }
             }
@@ -47,7 +51,11 @@ pub fn extract_front_matter(path: &PathBuf) -> (HashMap<String, serde_yaml::Valu
         }
     }
     trace!("{:?}, {:?}", &front_matter, &content);
-    let fm: HashMap<String, serde_yaml::Value> =
-        serde_yaml::from_str(front_matter.as_str()).unwrap_or(HashMap::new());
+    let fm: Option<HashMap<String, serde_yaml::Value>> = if !no_fm_flag {
+        Some(serde_yaml::from_str(front_matter.as_str()).unwrap_or(HashMap::new()))
+    } else {
+        None
+    };
+        
     (fm, content)
 }
