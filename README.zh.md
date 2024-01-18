@@ -185,6 +185,10 @@ sushi提供了以下全局对象：
 | `page.path` | 原始页面的路径 |
 | `page.next` | 下一页的id  |
 | `page.last` | 上一页的id  |
+| `page.content` | 页面的原始内容 |
+| `page.search_text` | 一般和`page.content`一样 |
+
+> `page.search_text`本意是用于实现搜索功能
 
 `sitetree`对象
 

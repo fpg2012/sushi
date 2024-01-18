@@ -185,6 +185,10 @@ Besides the key-value pair defined by user in `_config.yml` and front matter, `s
 | `page.path` | Path of original page file      |
 | `page.next` | ID of next page                 |
 | `page.last` | ID of last page                 |
+| `page.content` | original content of the page |
+| `page.search_text` | usually same as `page.content` |
+
+> `page.search_text` is meant to used for implementing search functionality
 
 `sitetree` object
 
