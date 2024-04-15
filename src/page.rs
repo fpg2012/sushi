@@ -1,6 +1,5 @@
 use chrono::{DateTime, Local, NaiveDateTime, NaiveTime, TimeZone};
 use itertools::Itertools;
-use log::debug;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -52,10 +51,10 @@ impl Page {
                 },
             }
         } else {
-            debug!("date is not defined in front_matter, use system time");
+            // debug!("date is not defined in front_matter, use system time");
             chrono::DateTime::from(chrono::DateTime::<Local>::from(SystemTime::now()))
         };
-        debug!("date: {}", date);
+        // debug!("date: {}", date);
         // get or gen id
         let page_id = if let Some(serde_yaml::Value::String(id)) = front_matter.get("page_id") {
             id.clone()

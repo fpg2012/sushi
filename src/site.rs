@@ -4,10 +4,7 @@ use crate::layout::Layout;
 use crate::page::{Page, PageRef};
 use crate::paginator::Paginator;
 use crate::site::SiteTreeNode::*;
-use chrono;
 use itertools::Itertools;
-use liquid::partials::{EagerCompiler, InMemorySource};
-use liquid::ParserBuilder;
 use log::{debug, error, info, trace, warn};
 use serde_yaml::Value;
 use std::cell::RefCell;
@@ -22,6 +19,8 @@ use std::time::SystemTime;
 use std::vec::Vec;
 use crate::existing_tree::{ETNodeRef, ExistingTreeNode};
 use crate::existing_tree::ExistingTreeNode::File;
+use crate::theme::Theme;
+use crate::configuration_loader::{self as confld, find_dir_or_panic};
 
 type NodeRef = Rc<RefCell<SiteTreeNode>>;
 type SiteTreeObject = serde_yaml::Value;
@@ -78,6 +77,8 @@ pub struct Site {
     all_pages_object: Option<serde_yaml::Value>,
 
     regen_all: bool,
+
+    theme: Option<Theme>,
 }
 
 pub struct SiteConfigs {
@@ -86,6 +87,7 @@ pub struct SiteConfigs {
     pub converters: Option<String>,
     pub includes: Option<String>,
     pub templates: Option<String>,
+    pub theme: Option<String>,
 }
 
 impl Site {
@@ -102,68 +104,98 @@ impl Site {
             })
             .expect(format!{"cannot find configuration file: {}", &site_configs.config}.as_str())
             .unwrap();
-        let config = Self::_parse_config_file(temp_config.path());
+        let mut config = confld::parse_config_file(temp_config.path());
 
-        let site_url = Self::_string_from_config("url", &config);
-        let site_gen_dir = Self::_string_from_config("gen_dir", &config);
-        let site_converters_dir = Self::_string_from_config("converters_dir", &config);
-        let site_templates_dir = Self::_string_from_config("templates_dir", &config);
-        let site_includes_dir = Self::_string_from_config("includes_dir", &config);
+        let site_url = confld::string_from_config("url", &config);
+        let site_gen_dir = confld::string_from_config("gen_dir", &config);
+        let site_converters_dir = confld::string_from_config("converters_dir", &config);
+        let site_templates_dir = confld::string_from_config("templates_dir", &config);
+        let site_includes_dir = confld::string_from_config("includes_dir", &config);
+        let site_theme_dir = confld::string_from_config("theme_dir", &config);
 
         let _gen_dir = Self::_decide_site_config(site_configs.gen.clone(), site_gen_dir, "_gen".to_string());
-        let _converters_dir = Self::_decide_site_config(site_configs.gen.clone(), site_converters_dir, "_converters".to_string());
-        let _templates_dir = Self::_decide_site_config(site_configs.gen.clone(), site_templates_dir, "_templates".to_string());
-        let _includes_dir = Self::_decide_site_config(site_configs.gen.clone(), site_includes_dir, "_includes".to_string());
+        let _converters_dir = Self::_decide_site_config(site_configs.converters.clone(), site_converters_dir, "_converters".to_string());
+        let _templates_dir = Self::_decide_site_config(site_configs.templates.clone(), site_templates_dir, "_templates".to_string());
+        let _includes_dir = Self::_decide_site_config(site_configs.includes.clone(), site_includes_dir, "_includes".to_string());
+        let _theme_dir = if site_configs.theme != None {
+            site_configs.theme.clone() // command line param
+        } else {
+            site_theme_dir // config file
+        };
 
         // search for _includes
-        let temp_includes = fs::read_dir(site_dir.clone()).unwrap().find(|x| {
-            if let Ok(file) = x {
-                file.file_name() == OsString::from(&_includes_dir) && file.path().is_dir()
-            } else {
-                false
-            }
-        });
-        let partial_compiler = if let Some(Ok(temp)) = temp_includes {
-            Self::_parse_includes(temp.path())
+        let temp_includes = confld::find_dir(&site_dir, &_includes_dir);
+        let mut partial_list = if let Some(Ok(temp)) = temp_includes {
+            confld::parse_includes(temp.path())
         } else {
-            warn!("no include template found");
-            liquid::partials::EagerCompiler::empty()
+            warn!("no include found");
+            HashMap::new()
         };
 
         // search for _templates
-        let temp_templates = fs::read_dir(site_dir.clone())
-            .unwrap()
-            .find(|x| {
-                if let Ok(file) = x {
-                    file.file_name() == OsString::from(&_templates_dir) && file.path().is_dir()
-                } else {
-                    false
-                }
-            })
-            .expect("cannot find _template dir")
-            .unwrap();
-        let templates = Self::_parse_templates(temp_templates.path(), partial_compiler);
+        let temp_templates = confld::find_dir(&site_dir, &_templates_dir);
+        let mut template_list = if let Some(Ok(temp)) = temp_templates {
+            confld::parse_templates(temp.path())
+        } else {
+            warn!("no template found");
+            HashMap::new()
+        };
 
         // search for _converters
-        let temp_converters = fs::read_dir(site_dir.clone())
-            .unwrap()
-            .find(|x| {
-                if let Ok(file) = x {
-                    file.file_name() == OsString::from(&_converters_dir) && file.path().is_dir()
-                } else {
-                    false
+        let temp_converters = confld::find_dir(&site_dir, &_converters_dir);
+        let mut converter_list = if let Some(Ok(temp)) = temp_converters {
+            confld::parse_converters(temp.path())
+        } else {
+            warn!("no converters found");
+            HashMap::new()
+        };
+
+        let mut theme = None;
+
+        // load theme
+        if let Some(theme_dir) = _theme_dir {
+            let temp_theme = find_dir_or_panic(&site_dir, &theme_dir);
+            let real_theme =Theme::new(temp_theme.path());
+
+            // combine list and config
+            for (name, path) in real_theme.partial_list.iter() {
+                if partial_list.get(name) == None {
+                    partial_list.insert(name.clone(), path.clone());
                 }
-            })
-            .expect("cannot find _converter dir")
-            .unwrap();
-        let converters = Self::_parse_converters(temp_converters.path());
+            }
+
+            for (name, path) in real_theme.template_list.iter() {
+                if template_list.get(name) == None {
+                    template_list.insert(name.clone(), path.clone());
+                }
+            }
+
+            for (name, path) in real_theme.converter_list.iter() {
+                if converter_list.get(name) == None {
+                    converter_list.insert(name.clone(), path.clone());
+                }
+            }
+
+            for (name, value) in real_theme.config.iter() {
+                if config.get(name) == None {
+                    config.insert(name.clone(), value.clone());
+                }
+            }
+
+            theme = Some(real_theme);
+        }
+
+        // compile & load
+        let partial_compiler = confld::compile_partials(partial_list);
+        let templates = confld::compile_templates(partial_compiler, template_list);
+        let converters = confld::load_converters(converter_list);
 
         // parse dir
         let mut gen_dir = site_dir.clone();
         gen_dir.push(_gen_dir);
         let existing_map = Rc::new(RefCell::new(HashMap::new()));
         let existing_tree = Self::_parse_gen(&gen_dir, existing_map.clone());
-        debug!("{:?}", &existing_map);
+        // debug!("{:?}", &existing_map);
 
         let (convert_ext, converter_choice, convert_to_ext, taxonomies) = Self::_extract_important_config(&config);
         debug!("{:?}", convert_ext);
@@ -191,11 +223,23 @@ impl Site {
             all_pages_object: None,
             id_to_page_object: None,
             regen_all,
+            theme,
         }
     }
+
     pub fn generate_site(&mut self) {
         // gen site tree
         let (site_tree, _) = self._gen_site_tree(&self.site_dir.clone());
+
+        if let Some(theme) = &self.theme {
+            if let SiteTreeNode::NormalDir { children, path: _, index } = &mut *site_tree.borrow_mut() {
+                self._merge_theme_site_tree(theme.theme_dir.clone(), children, index.clone());
+            }
+        }
+
+        let indent = String::from("");
+        Self::_print_site_tree(site_tree.clone(), &indent);
+
         self.site_tree = Some(site_tree);
 
         // gen sitetree object based on self.site_tree
@@ -232,32 +276,43 @@ impl Site {
         });
 
         // gen _gen
-        self._generate(self.site_tree.clone().unwrap(), globals);
+        self._generate(self.site_tree.clone().unwrap(), &self.gen_dir, globals);
     }
 
-    fn _generate(&self, current_node: NodeRef, mut globals: liquid::Object) -> liquid::Object {
+    fn _generate(&self, current_node: NodeRef, gen_path: &PathBuf, mut globals: liquid::Object) -> liquid::Object {
         match &mut *current_node.clone().borrow_mut() {
             SiteTreeNode::NormalDir { children, path, .. } => {
-                let dest_path = self._get_dest_path(path, false, None);
+                // let dest_path = self._get_dest_path(path, false, None);
+                let mut dest_path = gen_path.clone();
+                match path.file_name() {
+                    Some(file_name) => {
+                        dest_path.push(file_name);
+                    },
+                    None => ()
+                }
                 debug!("[mkdir]  {:?}", dest_path);
-                fs::create_dir_all(dest_path).expect("cannot create dir");
+                fs::create_dir_all(&dest_path).expect("cannot create dir");
                 let mut globals = globals;
                 for child in children.iter() {
-                    globals = self._generate(child.clone(), globals)
+                    globals = self._generate(child.clone(), &dest_path, globals)
                 }
                 globals
             }
             SiteTreeNode::PageFile { path, page, timestamp } => {
-                self.gen_page(path, page.clone(), &mut globals, timestamp);
+                let mut dest_path = gen_path.clone();
+                dest_path.push(path.file_name().unwrap());
+                self.gen_page(&dest_path, page.clone(), &mut globals, timestamp);
                 globals
             }
             SiteTreeNode::StaticFile { path, timestamp } => {
-                let dest_path = self._get_dest_path(path, false, None);
+                // let dest_path = self._get_dest_path(path, false, None);
+                let mut dest_path = gen_path.clone();
+                dest_path.push(path.file_name().unwrap());
                 // check whether skip copy
                 let src_timestamp = timestamp;
                 let do_copy = self._decide_skip(&dest_path, src_timestamp);
                 if do_copy {
-                    info!("[copy]  {}", path.clone().to_string_lossy());
+                    info!("[copy]  {} -> {}", path.clone().to_string_lossy(), &dest_path.to_string_lossy());
                     fs::copy(path.clone(), dest_path).unwrap();
                 } else {
                     debug!("[skip]  {}", path.clone().to_string_lossy());
@@ -291,32 +346,7 @@ impl Site {
                     children.push(child);
                 }
             }
-            // set page.next and page.last
-            let mut list = children
-                .iter()
-                .filter_map(|x| match &*x.borrow() {
-                    PageFile { page, .. } => Some(page.clone()),
-                    NormalDir { index, .. } => index.clone(),
-                    _ => None,
-                })
-                .collect_vec();
-            // sort according to date
-            // TODO: add more criteria for flexibility
-            list.sort_by(|a, b| match a.borrow().date().cmp(b.borrow().date()) {
-                std::cmp::Ordering::Greater => std::cmp::Ordering::Less,
-                std::cmp::Ordering::Less => std::cmp::Ordering::Greater,
-                std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
-            });
-            for (i, n) in list.iter().enumerate() {
-                if i as i64 - 1 >= 0 {
-                    if let Some(p) = list.get(i - 1) {
-                        n.clone().borrow_mut().set_last(Some(p.clone()));
-                    }
-                }
-                if let Some(p) = list.get(i + 1) {
-                    n.clone().borrow_mut().set_next(Some(p.clone()));
-                }
-            }
+            Self::_sort_children(&mut children);
             // return node
             let node = Rc::new(RefCell::new(SiteTreeNode::NormalDir {
                 children,
@@ -325,76 +355,166 @@ impl Site {
             }));
             (node, None)
         } else if path.is_file() {
-            // check whether it is page file by extension name
-            let timestamp = if let Ok(metadata) = path.metadata() {
-                metadata.modified().unwrap_or(SystemTime::now())
-            } else {
-                SystemTime::now()
-            };
-            if self.check_page(path) {
-                let ext = path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
-                let (fm, content) = extract_front_matter(path);
-
-                let fm = match fm {
-                    Some(fm) => fm,
-                    None => {
-                        let mut temp = HashMap::new();
-                        temp.insert(
-                            "to_ext".to_string(),
-                            serde_yaml::Value::from("html")
-                        ); // html by default
-                        temp.insert(
-                            "nolist".to_string(),
-                            serde_yaml::Value::from(true)
-                        ); // nolist by default
-                        temp
-                    }
-                };
-
-                // get expected extension name
-                let to_ext = match fm.get("to_ext") {
-                    Some(Value::String(t_e)) => t_e.clone(),
-                    _ => {
-                        match self.convert_to_ext.get(&ext.clone()) {
-                            Some(t_e) => t_e.clone(),
-                            _ => "html".to_string() // html by default
-                        }
-                    }
-                };
-
-                let url = self.get_page_url(path, to_ext.clone());
-                let page = Rc::new(RefCell::new(Page::new(fm, url, path.clone(), Some(to_ext), content)));
-                // check whether page_id is unique
-                let page_id = page.borrow().get_page_id().clone();
-                if self.id_to_page.contains_key(&page_id) {
-                    error!("id \"{}\" is not unique!", page_id);
-                    panic!();
-                }
-                // add page to self.pages and self.id_to_page
-                self.pages.push(page.clone());
-                self.id_to_page.insert(page_id, page.clone());
-                // return node and ref of index
-                let node = Rc::new(RefCell::new(SiteTreeNode::PageFile {
-                    path: path.clone(),
-                    page: page.clone(),
-                    timestamp,
-                }));
-                let index = if self.check_index(path) {
-                    Some(page.clone())
-                } else {
-                    None
-                };
-                (node, index)
-            } else {
-                let node = Rc::new(RefCell::new(SiteTreeNode::StaticFile {
-                    path: path.clone(),
-                    timestamp,
-                }));
-                (node, None)
-            }
+            self._load_file(&path)
         } else {
             error!("unknown type");
             panic!();
+        }
+    }
+
+    fn _load_file(&mut self, path: &PathBuf) -> (NodeRef, Option<PageRef>) {
+        // check whether it is page file by extension name
+        let timestamp = if let Ok(metadata) = path.metadata() {
+            metadata.modified().unwrap_or(SystemTime::now())
+        } else {
+            SystemTime::now()
+        };
+        if self.check_page(path) {
+            let ext = path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
+            let (fm, content) = extract_front_matter(path);
+
+            let fm = match fm {
+                Some(fm) => fm,
+                None => {
+                    let mut temp = HashMap::new();
+                    temp.insert(
+                        "to_ext".to_string(),
+                        serde_yaml::Value::from("html")
+                    ); // html by default
+                    temp.insert(
+                        "nolist".to_string(),
+                        serde_yaml::Value::from(true)
+                    ); // nolist by default
+                    temp
+                }
+            };
+
+            // get expected extension name
+            let to_ext = match fm.get("to_ext") {
+                Some(Value::String(t_e)) => t_e.clone(),
+                _ => {
+                    match self.convert_to_ext.get(&ext.clone()) {
+                        Some(t_e) => t_e.clone(),
+                        _ => "html".to_string() // html by default
+                    }
+                }
+            };
+
+            let url = self.get_page_url(path, to_ext.clone());
+            let page = Rc::new(RefCell::new(Page::new(fm, url, path.clone(), Some(to_ext), content)));
+            // check whether page_id is unique
+            let page_id = page.borrow().get_page_id().clone();
+            if self.id_to_page.contains_key(&page_id) {
+                error!("id \"{}\" is not unique!", page_id);
+                panic!();
+            }
+            // add page to self.pages and self.id_to_page
+            self.pages.push(page.clone());
+            self.id_to_page.insert(page_id, page.clone());
+            // return node and ref of index
+            let node = Rc::new(RefCell::new(SiteTreeNode::PageFile {
+                path: path.clone(),
+                page: page.clone(),
+                timestamp,
+            }));
+            let index = if self.check_index(path) {
+                Some(page.clone())
+            } else {
+                None
+            };
+            (node, index)
+        } else {
+            let node = Rc::new(RefCell::new(SiteTreeNode::StaticFile {
+                path: path.clone(),
+                timestamp,
+            }));
+            (node, None)
+        }
+    }
+
+    fn _merge_theme_site_tree(&mut self, path: PathBuf, children: &mut Vec<NodeRef>, mut index: Option<PageRef>) {
+        for entry in path.read_dir().unwrap() {
+            if let Ok(entry) = entry {
+                if entry
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with(|ch: char| ch == '.' || ch == '_') {
+                    continue;
+                }
+                if entry.path().is_dir() {
+                    let correspond_node = children.iter().find(|x| {
+                        if let SiteTreeNode::NormalDir { children: _, path, index: _ } = &*x.borrow() {
+                            path.file_name() == entry.path().file_name()
+                        } else {
+                            false
+                        }
+                    });
+                    match correspond_node {
+                        Some(node) => {
+                            if let SiteTreeNode::NormalDir { children, path: _, index } = &mut *node.borrow_mut() {
+                                self._merge_theme_site_tree(entry.path(), children, index.clone());
+                            };
+                        },
+                        None => {
+                            let (new_node, _) = self._gen_site_tree(&entry.path());
+                            children.push(new_node.clone());
+                        }
+                    };
+                } else if entry.path().is_file() {
+                    let correspond_node = children.iter().find(|x| {
+                        match &*x.borrow() {
+                            SiteTreeNode::PageFile { path, .. } => path.file_name() == entry.path().file_name(),
+                            SiteTreeNode::StaticFile { path, .. } => path.file_name() == entry.path().file_name(),
+                            _ => false
+                        }
+                    });
+                    match correspond_node  {
+                        None => {
+                            let (new_node, new_index) = self._load_file(&entry.path());
+                            children.push(new_node.clone());
+                            match index {
+                                None => index = new_index,
+                                _ => ()
+                            }
+                        },
+                        _ => ()
+                    }
+                } else {
+                    error!("unknown type");
+                    panic!();
+                }
+            }
+        }
+        Self::_sort_children(children);
+    }
+
+    fn _sort_children(children: &mut Vec<NodeRef>) {
+        // set page.next and page.last
+        let mut list = children
+            .iter()
+            .filter_map(|x| match &*x.borrow() {
+                PageFile { page, .. } => Some(page.clone()),
+                NormalDir { index, .. } => index.clone(),
+                    _ => None,
+            }).collect_vec();
+        // sort according to date
+        // TODO: add more criteria for flexibility
+        list.sort_by(|a, b| match a.borrow().date().cmp(b.borrow().date()) {
+            std::cmp::Ordering::Greater => std::cmp::Ordering::Less,
+            std::cmp::Ordering::Less => std::cmp::Ordering::Greater,
+            std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
+        });
+        for (i, n) in list.iter().enumerate() {
+            if i as i64 - 1 >= 0 {
+                if let Some(p) = list.get(i - 1) {
+                    n.borrow_mut().set_last(Some(p.clone()));
+                }
+            }
+            if let Some(p) = list.get(i + 1) {
+                n.borrow_mut().set_next(Some(p.clone()));
+            }
         }
     }
 
@@ -415,7 +535,10 @@ impl Site {
     }
 
     pub fn gen_page(&self, path: &PathBuf, page: PageRef, base_globals: &mut liquid::Object, timestamp: &SystemTime) {
-        let dest_path = self._get_dest_path(path, true, page.borrow().to_ext.clone());
+        let mut dest_path = path.clone();
+        dest_path.set_extension(page.borrow().to_ext.clone().unwrap());
+        // let dest_path = self._get_dest_path(path, true, page.borrow().to_ext.clone());
+        
         let paginator = page.borrow().paginate_info();
         let mut do_gen = self._decide_skip(&dest_path, timestamp);
         if let Some(_) = paginator {
@@ -811,103 +934,6 @@ impl Site {
         (convert_ext, converter_choice, convert_to_ext, taxonomies)
     }
 
-    fn _parse_config_file(path: PathBuf) -> HashMap<String, Value> {
-        let raw_config = fs::read(path).expect("cannot read config file");
-        let mut config: HashMap<String, Value> =
-            serde_yaml::from_slice(raw_config.as_slice()).expect("cannot parse config file");
-        config.insert(
-            String::from("time"),
-            Value::String(chrono::Local::now().to_rfc3339()),
-        );
-        debug!("{:?}", config);
-        config
-    }
-    fn _parse_includes(path: PathBuf) -> EagerCompiler<InMemorySource> {
-        let mut compiler = EagerCompiler::<InMemorySource>::empty();
-        if let Ok(dir) = fs::read_dir(path) {
-            for entry in dir {
-                if let Ok(entry) = entry {
-                    if let Some(ext) = entry.path().extension() {
-                        if ext == "liquid" {
-                            let content = fs::read_to_string(entry.path())
-                                .expect("cannot open liquid partial in include");
-                            compiler
-                                .add(entry.path().file_stem().unwrap().to_string_lossy(), content);
-                            debug!(
-                                "[discover] partial: \"{}\"",
-                                entry.path().file_stem().unwrap().to_string_lossy()
-                            );
-                        }
-                    }
-                }
-            }
-        }
-        compiler
-    }
-    fn _parse_templates(
-        path: PathBuf,
-        partials: EagerCompiler<InMemorySource>,
-    ) -> HashMap<String, Layout> {
-        let mut templates = HashMap::new();
-        let parser = ParserBuilder::with_stdlib()
-            .partials(partials)
-            .build()
-            .unwrap();
-        for entry in fs::read_dir(path).expect("cannot open _template dir") {
-            if let Ok(entry) = entry {
-                if let Some(ext) = entry.path().extension() {
-                    if ext == "liquid" {
-                        let (fm, real_content) = extract_front_matter(&entry.path());
-                        let fm = match fm {
-                            Some(fm) => fm,
-                            None => HashMap::new(),
-                        };
-                        let template = parser.parse(real_content.as_str());
-                        if let Err(e) = template {
-                            error!("{}", e);
-                            panic!("compile template error");
-                        }
-                        let template = template.unwrap();
-                        let layout = Layout::new(fm, template);
-                        templates.insert(
-                            entry
-                                .path()
-                                .file_stem()
-                                .unwrap()
-                                .to_string_lossy()
-                                .to_string(),
-                            layout,
-                        );
-                        debug!(
-                            "[discover] template: \"{}\"",
-                            entry.path().file_stem().unwrap().to_string_lossy()
-                        );
-                    }
-                }
-            }
-        }
-        templates
-    }
-    fn _parse_converters(path: PathBuf) -> HashMap<String, Converter> {
-        let mut converters = HashMap::new();
-        for entry in fs::read_dir(path).expect("cannot open _converter dir") {
-            if let Ok(entry) = entry {
-                converters.insert(
-                    entry.file_name().to_string_lossy().to_string(),
-                    Converter {
-                        name: entry.file_name().to_string_lossy().to_string(),
-                        path: entry.path(),
-                    },
-                );
-                debug!(
-                    "[discover] converter: \"{}\"",
-                    entry.file_name().to_string_lossy().to_string()
-                );
-            }
-        }
-        converters
-    }
-
     fn _parse_gen(path: &PathBuf, existing_map: Rc<RefCell<HashMap<PathBuf, ETNodeRef>>>) -> Option<ETNodeRef> {
         if path.is_dir() {
             let mut children: Vec<ETNodeRef> = vec![];
@@ -975,14 +1001,6 @@ impl Site {
         }
     }
 
-    fn _string_from_config(key: &str, config: &HashMap<String, serde_yaml::Value>) -> Option<String> {
-        if let Some(serde_yaml::Value::String(s)) = config.get(key) {
-            Some(s.clone())
-        } else {
-            None
-        }
-    }
-
     fn _decide_site_config(cli_config: Option<String>, yml_config: Option<String>, default_config: String) -> String {
         // command line configuration is prior to _site.yml configuration
         if let Some(cli_str) = cli_config {
@@ -993,6 +1011,25 @@ impl Site {
             } else {
                 default_config
             }
+        }
+    }
+
+    fn _print_site_tree(current_node: NodeRef, indent: &String) {
+        match &*current_node.borrow() {
+            SiteTreeNode::NormalDir { children, path, .. } => {
+                let new_indent = indent.clone() + " |";
+                debug!("{}-+ {}", &indent, path.file_name().unwrap_or(OsString::from("").as_os_str()).to_string_lossy());
+                for child in children.iter() {
+                    Self::_print_site_tree(child.clone(), &new_indent);
+                }
+            },
+            SiteTreeNode::PageFile { path, .. } => {
+                debug!("{}-- {}", &indent, path.file_name().unwrap().to_string_lossy());
+            },
+            SiteTreeNode::StaticFile { path, .. } => {
+                debug!("{}-- {}", &indent, path.file_name().unwrap().to_string_lossy());
+            },
+            _ => ()
         }
     }
 }

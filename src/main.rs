@@ -6,6 +6,8 @@ mod page;
 mod paginator;
 mod site;
 mod existing_tree;
+mod theme;
+mod configuration_loader;
 
 use crate::site::{Site, SiteConfigs};
 use clap::Parser;
@@ -47,6 +49,8 @@ enum Command {
         converters: Option<String>,
         #[clap(long)]
         templates: Option<String>,
+        #[clap(long)]
+        theme: Option<String>,
     }
 }
 
@@ -112,13 +116,14 @@ fn main() {
         } => {
             initialize_site(site_name, theme, path);
         }
-        Command::Build { regen_all, config, gen, includes, converters, templates } => {
+        Command::Build { regen_all, config, gen, includes, converters, templates, theme } => {
             let site_configs = SiteConfigs {
                 config: config.clone(),
                 gen: gen.clone(),
                 converters: converters.clone(),
                 includes: includes.clone(),
                 templates: templates.clone(),
+                theme: theme.clone(),
             };
             let mut site = Site::parse_site_dir(".".into(), regen_all.clone(), site_configs);
             site.generate_site();
