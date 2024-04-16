@@ -1,9 +1,3 @@
-use crate::converters::Converter;
-use crate::extract_frontmatter::extract_front_matter;
-use crate::layout::Layout;
-use crate::page::{Page, PageRef};
-use crate::paginator::Paginator;
-use crate::site::SiteTreeNode::*;
 use itertools::Itertools;
 use log::{debug, error, info, trace, warn};
 use serde_yaml::Value;
@@ -17,10 +11,17 @@ use std::rc::Rc;
 use std::string::String;
 use std::time::SystemTime;
 use std::vec::Vec;
+
+use crate::converters::Converter;
+use crate::extract_frontmatter::extract_front_matter;
+use crate::layout::Layout;
+use crate::page::{Page, PageRef};
+use crate::paginator::Paginator;
+use crate::site::SiteTreeNode::*;
 use crate::existing_tree::{ETNodeRef, ExistingTreeNode};
 use crate::existing_tree::ExistingTreeNode::File;
 use crate::theme::Theme;
-use crate::configuration_loader::{self as confld, find_dir_or_panic};
+use crate::configuration_loader as confld;
 
 type NodeRef = Rc<RefCell<SiteTreeNode>>;
 type SiteTreeObject = serde_yaml::Value;
@@ -32,14 +33,15 @@ pub enum SiteTreeNode {
         children: Vec<NodeRef>,
         path: PathBuf,
         index: Option<PageRef>,
+        gen_path: PathBuf,
     },
     PageFile {
         path: PathBuf,
         page: PageRef,
-        timestamp: SystemTime,
     },
     StaticFile {
         path: PathBuf,
+        gen_path: PathBuf,
         timestamp: SystemTime,
     },
 }
@@ -154,7 +156,7 @@ impl Site {
 
         // load theme
         if let Some(theme_dir) = _theme_dir {
-            let temp_theme = find_dir_or_panic(&site_dir, &theme_dir);
+            let temp_theme = confld::find_dir_or_panic(&site_dir, &theme_dir);
             let real_theme =Theme::new(temp_theme.path());
 
             // combine list and config
@@ -229,11 +231,12 @@ impl Site {
 
     pub fn generate_site(&mut self) {
         // gen site tree
-        let (site_tree, _) = self._gen_site_tree(&self.site_dir.clone());
+        let gen_dir = self.gen_dir.clone();
+        let (site_tree, _) = self._gen_site_tree(&self.site_dir.clone(), &gen_dir);
 
         if let Some(theme) = &self.theme {
-            if let SiteTreeNode::NormalDir { children, path: _, index } = &mut *site_tree.borrow_mut() {
-                self._merge_theme_site_tree(theme.theme_dir.clone(), children, index.clone());
+            if let SiteTreeNode::NormalDir { children, path: _, gen_path: _, index } = &mut *site_tree.borrow_mut() {
+                self._merge_theme_site_tree(theme.theme_dir.clone(), &gen_dir, children, index.clone());
             }
         }
 
@@ -276,41 +279,38 @@ impl Site {
         });
 
         // gen _gen
-        self._generate(self.site_tree.clone().unwrap(), &self.gen_dir, globals);
+        self._generate(self.site_tree.clone().unwrap(), globals);
     }
 
-    fn _generate(&self, current_node: NodeRef, gen_path: &PathBuf, mut globals: liquid::Object) -> liquid::Object {
+    fn _generate(&self, current_node: NodeRef, mut globals: liquid::Object) -> liquid::Object {
         match &mut *current_node.clone().borrow_mut() {
-            SiteTreeNode::NormalDir { children, path, .. } => {
+            SiteTreeNode::NormalDir { children, path: _, gen_path, .. } => {
                 // let dest_path = self._get_dest_path(path, false, None);
-                let mut dest_path = gen_path.clone();
-                match path.file_name() {
-                    Some(file_name) => {
-                        dest_path.push(file_name);
-                    },
-                    None => ()
-                }
+                let dest_path = gen_path.clone();
+                // match path.file_name() {
+                //     Some(file_name) => {
+                //         dest_path.push(file_name);
+                //     },
+                //     None => ()
+                // }
                 debug!("[mkdir]  {:?}", dest_path);
                 fs::create_dir_all(&dest_path).expect("cannot create dir");
                 let mut globals = globals;
                 for child in children.iter() {
-                    globals = self._generate(child.clone(), &dest_path, globals)
+                    globals = self._generate(child.clone(), globals)
                 }
                 globals
             }
-            SiteTreeNode::PageFile { path, page, timestamp } => {
-                let mut dest_path = gen_path.clone();
-                dest_path.push(path.file_name().unwrap());
-                self.gen_page(&dest_path, page.clone(), &mut globals, timestamp);
+            SiteTreeNode::PageFile { path: _, page} => {
+                self.gen_page(page.clone(), &mut globals);
                 globals
             }
-            SiteTreeNode::StaticFile { path, timestamp } => {
+            SiteTreeNode::StaticFile { path, gen_path, timestamp } => {
                 // let dest_path = self._get_dest_path(path, false, None);
-                let mut dest_path = gen_path.clone();
-                dest_path.push(path.file_name().unwrap());
+                let dest_path = gen_path.clone();
                 // check whether skip copy
                 let src_timestamp = timestamp;
-                let do_copy = self._decide_skip(&dest_path, src_timestamp);
+                let do_copy = self._decide_not_skip_static(&dest_path, src_timestamp);
                 if do_copy {
                     info!("[copy]  {} -> {}", path.clone().to_string_lossy(), &dest_path.to_string_lossy());
                     fs::copy(path.clone(), dest_path).unwrap();
@@ -323,10 +323,17 @@ impl Site {
         }
     }
 
-    fn _gen_site_tree(&mut self, path: &PathBuf) -> (NodeRef, Option<PageRef>) {
+    fn _gen_site_tree(&mut self, path: &PathBuf, gen_path: &PathBuf) -> (NodeRef, Option<PageRef>) {
         if path.is_dir() {
             let mut children: Vec<NodeRef> = vec![];
             let mut index: Option<PageRef> = None;
+            let mut new_gen_path = gen_path.clone();
+            match path.file_name() {
+                None => (),
+                Some(file_name) => {
+                    new_gen_path.push(file_name);
+                }
+            }
             for entry in path.read_dir().unwrap() {
                 if let Ok(entry) = entry {
                     if entry
@@ -338,7 +345,7 @@ impl Site {
                     {
                         continue;
                     }
-                    let (child, index_) = self._gen_site_tree(&entry.path());
+                    let (child, index_) = self._gen_site_tree(&entry.path(), &new_gen_path);
                     match &*child.borrow() {
                         PageFile { .. } => index = index_,
                         _ => (),
@@ -351,26 +358,28 @@ impl Site {
             let node = Rc::new(RefCell::new(SiteTreeNode::NormalDir {
                 children,
                 path: path.clone(),
+                gen_path: new_gen_path,
                 index,
             }));
             (node, None)
         } else if path.is_file() {
-            self._load_file(&path)
+            self._load_file(&path, &gen_path)
         } else {
             error!("unknown type");
             panic!();
         }
     }
 
-    fn _load_file(&mut self, path: &PathBuf) -> (NodeRef, Option<PageRef>) {
+    fn _load_file(&mut self, path: &PathBuf, gen_path: &PathBuf) -> (NodeRef, Option<PageRef>) {
         // check whether it is page file by extension name
         let timestamp = if let Ok(metadata) = path.metadata() {
             metadata.modified().unwrap_or(SystemTime::now())
         } else {
             SystemTime::now()
         };
-        if self.check_page(path) {
+        if self.is_page(path) {
             let ext = path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
+
             let (fm, content) = extract_front_matter(path);
 
             let fm = match fm {
@@ -400,8 +409,20 @@ impl Site {
                 }
             };
 
+            let mut new_gen_path = gen_path.clone();
+            new_gen_path.push(path.file_stem().unwrap());
+            new_gen_path.set_extension(&to_ext);
+
             let url = self.get_page_url(path, to_ext.clone());
-            let page = Rc::new(RefCell::new(Page::new(fm, url, path.clone(), Some(to_ext), content)));
+            let page = Rc::new(RefCell::new(Page::new(
+                fm, 
+                url, 
+                path.clone(), 
+                Some(to_ext), 
+                content, 
+                timestamp.clone(),
+                new_gen_path
+            )));
             // check whether page_id is unique
             let page_id = page.borrow().get_page_id().clone();
             if self.id_to_page.contains_key(&page_id) {
@@ -415,24 +436,26 @@ impl Site {
             let node = Rc::new(RefCell::new(SiteTreeNode::PageFile {
                 path: path.clone(),
                 page: page.clone(),
-                timestamp,
             }));
-            let index = if self.check_index(path) {
+            let index = if self.is_index(path) {
                 Some(page.clone())
             } else {
                 None
             };
             (node, index)
         } else {
+            let mut new_gen_path = gen_path.clone();
+            new_gen_path.push(path.file_name().unwrap());
             let node = Rc::new(RefCell::new(SiteTreeNode::StaticFile {
                 path: path.clone(),
+                gen_path: new_gen_path,
                 timestamp,
             }));
             (node, None)
         }
     }
 
-    fn _merge_theme_site_tree(&mut self, path: PathBuf, children: &mut Vec<NodeRef>, mut index: Option<PageRef>) {
+    fn _merge_theme_site_tree(&mut self, path: PathBuf, gen_path: &PathBuf, children: &mut Vec<NodeRef>, mut index: Option<PageRef>) {
         for entry in path.read_dir().unwrap() {
             if let Ok(entry) = entry {
                 if entry
@@ -445,7 +468,7 @@ impl Site {
                 }
                 if entry.path().is_dir() {
                     let correspond_node = children.iter().find(|x| {
-                        if let SiteTreeNode::NormalDir { children: _, path, index: _ } = &*x.borrow() {
+                        if let SiteTreeNode::NormalDir { children: _, path, ..} = &*x.borrow() {
                             path.file_name() == entry.path().file_name()
                         } else {
                             false
@@ -453,12 +476,12 @@ impl Site {
                     });
                     match correspond_node {
                         Some(node) => {
-                            if let SiteTreeNode::NormalDir { children, path: _, index } = &mut *node.borrow_mut() {
-                                self._merge_theme_site_tree(entry.path(), children, index.clone());
+                            if let SiteTreeNode::NormalDir { children, path: _, gen_path, index } = &mut *node.borrow_mut() {
+                                self._merge_theme_site_tree(entry.path(), &gen_path, children, index.clone());
                             };
                         },
                         None => {
-                            let (new_node, _) = self._gen_site_tree(&entry.path());
+                            let (new_node, _) = self._gen_site_tree(&entry.path(), &gen_path);
                             children.push(new_node.clone());
                         }
                     };
@@ -472,7 +495,7 @@ impl Site {
                     });
                     match correspond_node  {
                         None => {
-                            let (new_node, new_index) = self._load_file(&entry.path());
+                            let (new_node, new_index) = self._load_file(&entry.path(), &gen_path);
                             children.push(new_node.clone());
                             match index {
                                 None => index = new_index,
@@ -518,7 +541,7 @@ impl Site {
         }
     }
 
-    fn check_page(&self, path: &PathBuf) -> bool {
+    fn is_page(&self, path: &PathBuf) -> bool {
         self.convert_ext.contains(
             &path
                 .extension()
@@ -528,24 +551,26 @@ impl Site {
         )
     }
 
-    fn check_index(&self, path: &PathBuf) -> bool {
+    fn is_index(&self, path: &PathBuf) -> bool {
         let filename = path.file_stem().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
         let ext = path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
         filename == "index" && self.convert_ext.get(ext.as_str()) != None
     }
 
-    pub fn gen_page(&self, path: &PathBuf, page: PageRef, base_globals: &mut liquid::Object, timestamp: &SystemTime) {
-        let mut dest_path = path.clone();
-        dest_path.set_extension(page.borrow().to_ext.clone().unwrap());
+    pub fn gen_page(&self, page: PageRef, base_globals: &mut liquid::Object) {
+        let dest_path = page.borrow().gen_path.clone();
+        let gen_time = page.borrow().gen_time().clone();
+        // let mut dest_path = path.clone();
+        // dest_path.set_extension(page.borrow().to_ext.clone().unwrap());
         // let dest_path = self._get_dest_path(path, true, page.borrow().to_ext.clone());
         
         let paginator = page.borrow().paginate_info();
-        let mut do_gen = self._decide_skip(&dest_path, timestamp);
+        let mut do_gen = self._decide_not_skip_page(page.clone());
         if let Some(_) = paginator {
             do_gen = true;
         }
         if !do_gen {
-            debug!("[skip]  {}", path.clone().to_string_lossy());
+            debug!("[skip]  {}", page.borrow().path.clone().to_string_lossy());
             return;
         }
 
@@ -556,7 +581,7 @@ impl Site {
         let mut converter_choice = String::new();
         if let Some(choice) = self
             .converter_choice
-            .get(path.extension().unwrap_or(OsStr::new("")).to_str().unwrap())
+            .get(page.borrow().path.extension().unwrap_or(OsStr::new("")).to_str().unwrap())
         {
             converter_choice = choice.clone();
         }
@@ -598,7 +623,7 @@ impl Site {
                 } else {
                     debug!("no layout set, copy by default");
                 }
-                info!("[conv]  {}", path.clone().to_string_lossy());
+                info!("[conv]  {}", page.borrow().path.clone().to_string_lossy());
                 debug!("[conv] to {:?}", &dest_path);
                 match fs::write(&dest_path, rendered) {
                     Ok(_) => (),
@@ -606,7 +631,7 @@ impl Site {
                 }
             }
             Some((exp, batch_size)) => {
-                info!("[conv]  {}", path.clone().to_string_lossy());
+                info!("[conv]  {}", page.borrow().path.clone().to_string_lossy());
                 match Paginator::from_expression_and_object(
                     base_globals,
                     &exp,
@@ -703,6 +728,7 @@ impl Site {
             NormalDir {
                 children,
                 path,
+                gen_path: _,
                 index,
             } => {
                 let mut list = vec![];
@@ -873,16 +899,16 @@ impl Site {
         temp
     }
 
-    fn _get_dest_path(&self, path: &PathBuf, is_page: bool, to_ext: Option<String>) -> PathBuf {
-        let mut dest = PathBuf::from(&self.gen_dir);
-        dest.push(path.strip_prefix(&self.site_dir).unwrap());
-        if is_page {
-            if let Some(ext) = to_ext {
-                dest.set_extension(ext);
-            }
-        }
-        dest
-    }
+    // fn _get_dest_path(&self, path: &PathBuf, is_page: bool, to_ext: Option<String>) -> PathBuf {
+    //     let mut dest = PathBuf::from(&self.gen_dir);
+    //     dest.push(path.strip_prefix(&self.site_dir).unwrap());
+    //     if is_page {
+    //         if let Some(ext) = to_ext {
+    //             dest.set_extension(ext);
+    //         }
+    //     }
+    //     dest
+    // }
 
     fn _extract_important_config(
         config: &HashMap<String, Value>,
@@ -971,7 +997,7 @@ impl Site {
         }
     }
 
-    fn lookup_existing_tree(&self, path: &PathBuf) -> Option<ETNodeRef> {
+    fn lookup_existing_map(&self, path: &PathBuf) -> Option<ETNodeRef> {
         if let Some(et) = self.existing_map.borrow().get(path) {
             Some(et.clone())
         } else {
@@ -979,11 +1005,31 @@ impl Site {
         }
     }
 
-    fn _decide_skip(&self, dest_path: &PathBuf, src_timestamp: &SystemTime) -> bool {
+    fn _decide_not_skip_static(&self, dest_path: &PathBuf, src_timestamp: &SystemTime) -> bool {
         if self.regen_all {
             return true;
         }
-        if let Some(et) = self.lookup_existing_tree(dest_path) {
+        self.is_src_newer(dest_path, src_timestamp)
+    }
+
+    fn _decide_not_skip_page(&self, page: PageRef) -> bool {
+        if self.regen_all {
+            return true;
+        }
+        let self_is_newer = self.is_src_newer(&page.borrow().gen_path, page.borrow().gen_time());
+        let mut next_is_newer = false;
+        let mut last_is_newer = false;
+        if let Some(next_page) = page.borrow().next() {
+            next_is_newer = self.is_src_newer(&next_page.borrow().gen_path, next_page.borrow().gen_time());
+        }
+        if let Some(last_page) = page.borrow().last() {
+            last_is_newer = self.is_src_newer(&last_page.borrow().gen_path, last_page.borrow().gen_time());
+        }
+        self_is_newer || next_is_newer || last_is_newer
+    }
+
+    fn is_src_newer(&self, dest_path: &PathBuf, src_timestamp: &SystemTime) -> bool {
+        if let Some(et) = self.lookup_existing_map(dest_path) {
             // check time
             match &*et.clone().borrow() {
                 File { path: _, timestamp } => {
@@ -1024,10 +1070,10 @@ impl Site {
                 }
             },
             SiteTreeNode::PageFile { path, .. } => {
-                debug!("{}-- {}", &indent, path.file_name().unwrap().to_string_lossy());
+                debug!("{}-- {} (page)", &indent, path.file_name().unwrap().to_string_lossy());
             },
             SiteTreeNode::StaticFile { path, .. } => {
-                debug!("{}-- {}", &indent, path.file_name().unwrap().to_string_lossy());
+                debug!("{}-- {} (static)", &indent, path.file_name().unwrap().to_string_lossy());
             },
             _ => ()
         }

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Local, NaiveDateTime, NaiveTime, TimeZone};
 use itertools::Itertools;
+use std::alloc::System;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -23,6 +24,8 @@ pub struct Page {
     page_id: PageId,
     pub to_ext: Option<String>,
     pub content: String,
+    gen_time: SystemTime,
+    pub gen_path: PathBuf,
 }
 
 impl Page {
@@ -32,6 +35,8 @@ impl Page {
         path: PathBuf,
         to_ext: Option<String>,
         content: String,
+        gen_time: SystemTime,
+        gen_path: PathBuf,
     ) -> Self {
         // get or gen date
         let date = if let Some(serde_yaml::Value::String(date)) = front_matter.get("date") {
@@ -74,6 +79,8 @@ impl Page {
             path,
             to_ext,
             content,
+            gen_time,
+            gen_path,
         }
     }
 
@@ -105,7 +112,7 @@ impl Page {
         if config.get("date") == None {
             config.insert(
                 "date".to_string(),
-                serde_yaml::Value::String(self.date.to_string()),
+                serde_yaml::Value::String(self.date.to_rfc3339()),
             );
         }
         if config.get("page_id") == None {
@@ -169,6 +176,10 @@ impl Page {
 
     pub fn date(&self) -> &chrono::DateTime<Local> {
         &self.date
+    }
+
+    pub fn gen_time(&self) -> &SystemTime {
+        &self.gen_time
     }
 
     pub fn paginate_info(&self) -> Option<(String, usize)> {
