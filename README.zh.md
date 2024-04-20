@@ -39,29 +39,49 @@ cargo build --release
 
 1. 安装sushi
 
-2. 获取一个starter（或者也可以叫做所谓的“主题”）
-   
-   比方说[sushi-theme-letter](https://github.com/fpg2012/sushi-theme-letter)
-   
-   ```
-   git clone https://github.com/fpg2012/sushi-theme-letter
-   ```
-   
-   然后把这一starter复制到ssushi的配置文件夹。在Linux上一般是`$XDG_CONFIG_DIR/sushi-gen`，或者`$HOME/.config/sushi-gen`（参阅[ProjectDirs in directories](https://docs.rs/directories/4.0.1/directories/struct.ProjectDirs.html#method.config_dir)）。记得安装starter所需的依赖。
+2. 创建一个新的文件夹并进入（假设文件夹名为`blog`）
 
-3. 初始化你的站点
-   
-   ```
-   ssushi init [站点名字]
+3. 新建名为`_site.yml`的文件，内容如下
+
+   ```yaml
+   site_name: "My Blog"
+   author: "my name"
+   url: "//127.0.0.1:5000" # 站点首页的url
+   theme_dir: "_theme"
    ```
 
-4. 构建站点
+4. 下载主题，如[empty](https://github.com/fpg2012/sushi-theme-empty)
+
+   ```
+   git clone https://github.com/fpg2012/sushi-theme-empty _theme
+   ```
+
+5. 新建名为`posts`的文件夹并往里面添加markdown文件，比如新建`helloworld.md`
    
+   ```md
+   ---
+   layout: post
+   title: "Hello World"
+   date: 2024-01-01
+   description: "My first post."
+   category: [hello]
+   tag: [blog, sushi, ssg]
+   ---
+
+   # Hello World
+
+   helloworld
+
+   $E = mc^2$
+   ```
+
+6. 构建，运行
+
    ```
    ssushi build
    ```
 
-5. 构建完成后，生成好的站点放在`_gen`之中。可以安装一个`sfz`将其部署到本地，以便查看效果。
+7. 构建完成后，生成好的站点放在`_gen`之中。可以安装一个`sfz`将其部署到本地，以便查看效果。
    
    ```
    cargo install sfz
@@ -130,6 +150,11 @@ taxonomies: ["category", "tag"]
 | `converter_choice` | 映射〔map〕数组 | 指定每种后缀名使用哪一种转换器                 |
 | `taxonomies`       | 映射〔map〕数组 | 分类方式列表                          |
 | `url`              | 字符串       | 站点的url。如果不填，将使用`/`              |
+| `theme_dir` | string | 主题文件夹 |
+| `gen_dir` | string | 放置生成的文件的文件夹. default: `_gen` |
+| `converter_dir` | string | converters文件夹. default: `_converters` |
+| `templates_dir` | string | templates文件夹. default: `_templates` |
+| `includes_dir` | string | 放置liquid partials的文件夹. default: `_includes` |
 
 ### 页面扉页
 
@@ -138,7 +163,7 @@ taxonomies: ["category", "tag"]
 ```
 ---
 layout: post
-title: "Test of Sushi"
+title: "Test Sushi"
 date: "2022-03-12"
 tag: ["a", "b", "c"]
 category: ["dev"]
@@ -289,7 +314,46 @@ pandoc -f [filter] --katex
 
 修改权限使之可执行，然后放到`_converter`中，然后在站点配置中让sushi调用它。
 
-### 站点初始化
+### 主题
+
+如果需要使用主题，建议将主题放置在`_theme`文件夹中，并在`_site.yml`中设置：
+
+```yaml
+theme_dir: "_theme"
+```
+
+如有必要，可以主题文件夹命名为任意下划线`_`开头的名称，`_site.yml`中的`theme_dir`也要做对应修改。以下内容假设主题文件夹名为`_theme`
+
+主题文件夹的结构和站点结构相同。在生成站点时，sushi会将主题文件夹中的站点树与现有的站点树合并，也会将`_theme/_site.yml`中的配置合并进来。若站点树与主题的站点树存在冲突，则会忽略主题中冲突的部分。同理，`_site.yml`中的配置会覆盖`_theme/_site.yml`中的配置。
+
+例如，假设站点结构如下
+
+```
+site
+├── assets
+│   └── a.jpg
+├── helloworld.md
+├── _site.yml
+└── _theme
+    ├── assets
+    │   └── favicon.png
+    ├── _converters
+    ├── _includes
+    ├── _site.yml
+    └── _templates
+```
+
+则生成之后的站点树如下
+
+```
+_gen
+├── assets
+│   ├── a.jpg
+│   └── favicon.png
+└── helloworld.html
+```
+
+### 站点初始化（不推荐）
 
 当你执行`ssushi init [sitename]`的时候，sushi会自动搜寻名为`default`的站点模板文件夹，然后把那个文件夹复制到工作目录（并重命名为`sitename`）。sushi搜寻的文件夹包括项目配置文件夹和当前工作目录。
 
@@ -297,4 +361,6 @@ pandoc -f [filter] --katex
 
 注意，sushi并不自带默认模板，必须自己创建/下载一个。
 
+### sushi的设计目的和“最佳”实践
 
+参见 [如何更好地使用sushi](https://nth233.top/posts/2022-12-29-%E5%A6%82%E4%BD%95%E6%9B%B4%E5%A5%BD%E5%9C%B0%E4%BD%BF%E7%94%A8sushi.html)

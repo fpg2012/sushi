@@ -28,7 +28,6 @@ type SiteTreeObject = serde_yaml::Value;
 
 #[derive(Debug)]
 pub enum SiteTreeNode {
-    Unknown,
     NormalDir {
         children: Vec<NodeRef>,
         path: PathBuf,
@@ -63,7 +62,6 @@ pub struct Site {
     converters: HashMap<String, Converter>,
     gen_dir: PathBuf,
     site_tree: Option<NodeRef>,
-    existing_tree: Option<ETNodeRef>,
     existing_map: Rc<RefCell<HashMap<PathBuf, ETNodeRef>>>,
 
     convert_ext: HashSet<String>,
@@ -196,7 +194,7 @@ impl Site {
         let mut gen_dir = site_dir.clone();
         gen_dir.push(_gen_dir);
         let existing_map = Rc::new(RefCell::new(HashMap::new()));
-        let existing_tree = Self::_parse_gen(&gen_dir, existing_map.clone());
+        Self::_parse_gen(&gen_dir, existing_map.clone());
         // debug!("{:?}", &existing_map);
 
         let (convert_ext, converter_choice, convert_to_ext, taxonomies) = Self::_extract_important_config(&config);
@@ -212,7 +210,6 @@ impl Site {
             converters,
             gen_dir,
             site_tree: None,
-            existing_tree,
             existing_map,
             convert_ext,
             converter_choice,
@@ -319,7 +316,6 @@ impl Site {
                 }
                 globals
             }
-            _ => panic!("unknown node type"),
         }
     }
 
@@ -559,7 +555,6 @@ impl Site {
 
     pub fn gen_page(&self, page: PageRef, base_globals: &mut liquid::Object) {
         let dest_path = page.borrow().gen_path.clone();
-        let gen_time = page.borrow().gen_time().clone();
         // let mut dest_path = path.clone();
         // dest_path.set_extension(page.borrow().to_ext.clone().unwrap());
         // let dest_path = self._get_dest_path(path, true, page.borrow().to_ext.clone());
@@ -1075,7 +1070,6 @@ impl Site {
             SiteTreeNode::StaticFile { path, .. } => {
                 debug!("{}-- {} (static)", &indent, path.file_name().unwrap().to_string_lossy());
             },
-            _ => ()
         }
     }
 }

@@ -7,7 +7,6 @@ pub type ETNodeRef = Rc<RefCell<ExistingTreeNode>>;
 
 #[derive(Debug)]
 pub enum ExistingTreeNode {
-    Unknown,
     NormalDir {
         children: Vec<ETNodeRef>,
         path: PathBuf,

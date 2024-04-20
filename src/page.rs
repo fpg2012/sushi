@@ -1,6 +1,5 @@
 use chrono::{DateTime, Local, NaiveDateTime, NaiveTime, TimeZone};
 use itertools::Itertools;
-use std::alloc::System;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -82,10 +81,6 @@ impl Page {
             gen_time,
             gen_path,
         }
-    }
-
-    pub fn get_front_matter(&self) -> &HashMap<String, serde_yaml::Value> {
-        &self.front_matter
     }
 
     pub fn get_page_config_object(&self) -> serde_yaml::Mapping {

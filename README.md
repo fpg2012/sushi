@@ -41,18 +41,40 @@ For Linux users:
 
 1. Install sushi
 
-2. Get a starter (or so called "theme"), for example
-   
-   ```
-   git clone https://github.com/fpg2012/sushi-theme-letter
-   ```
-   
-   Copy the starter into config directory and rename it to `default`. On Linux, it is `$XDG_CONFIG_DIR/sushi-gen` or `$HOME/.config/sushi-gen`. (Refer to [ProjectDirs in directories](https://docs.rs/directories/4.0.1/directories/struct.ProjectDirs.html#method.config_dir)). Don't forget to install all dependencies of the starter.
+2. Create a new directory for your site which can be named `blog`. `cd` into this directory.
 
-3. Initialize your site
+3. Get a theme (for example, [empty](https://github.com/fpg2012/sushi-theme-empty))
    
    ```
-   ssushi init [your_site_name]
+   git clone https://github.com/fpg2012/sushi-theme-empty _theme
+   ```
+
+3. Create `_site.yml`
+   
+   ```yaml
+   site_name: "My Blog"
+   author: "my name"
+   url: "//127.0.0.1:5000" # site url
+   theme_dir: "_theme"
+   ```
+
+4. Create a post. Create a directory named `post`, and then put some markdown files into it, for example, `posts/helloworld.md`
+
+   ```md
+   ---
+   layout: post
+   title: "Hello World"
+   date: 2024-01-01
+   description: "My first post."
+   category: [hello]
+   tag: [blog, sushi, ssg]
+   ---
+
+   # Hello World
+
+   helloworld
+
+   $E = mc^2$
    ```
 
 4. Build the site
@@ -103,11 +125,11 @@ Actually only `_converters`, `_includes`, `_templates` and `_site.yml` are neces
 
 Templates (written in liquid template language) and partials (in liquid too) should be stored in `_templates` and `_includes` respectively. Site configurations are written in `_site.yml`. `_converters` stores executables for converting page files into HTML pages (i.e. markdown parsers).
 
-> Note that sūshì does not parse markdown (or any other format) directly, what it does is simply compiling templates you provide and insert the converted page contents into them. You can write your parser, or write a simple script to execute some parser (i.e. **pandoc**).
+> Note that sūshì does not parse markdown (or any other format) directly, what it does is simply compiling templates you provide and insert the converted page contents into them. You are required to write converters which are basically simple scripts to execute **pandoc** or any other parser you like, for sushi to invoke.
 
-After reading these important configurations, sushi convert all pages found by execute the converters. Folders and file start with `.` or `_` will be ignored. All file that are not recognized as "page files" will be copied directly to the corresponding locations.
+After reading these important configurations, sushi convert all pages by executing the converters. Folders and file start with `.` or `_` will be ignored. All file that are not recognized as "page files" will be copied directly to the corresponding locations.
 
-Generated site is put in `_gen` folder.
+Generated site will be put into `_gen` folder.
 
 ### Site Configuration
 
@@ -130,6 +152,12 @@ taxonomies: ["category", "tag"]
 | `converter_choice` | array of map    | Specific which converter to be used. If not set, all pages will be inserted to templates directly. |
 | `taxonomies`       | array of map    | List of taxonomies                                                                                 |
 | `url`              | string          | Base url of the site. If not set, `"/"` will be used.                                              |
+| `theme_dir` | string | Theme directory |
+| `gen_dir` | string | folder for the generated files. default: `_gen` |
+| `converter_dir` | string | folder of converters. default: `_converters` |
+| `templates_dir` | string | folder of liquid templates. default: `_templates` |
+| `includes_dir` | string | folder of liquid partials. default: `_includes` |
+
 
 ### Page Front Matter
 
@@ -138,7 +166,7 @@ Front matter contains the configuration of the page.
 ```
 ---
 layout: post
-title: "Test of Sushi"
+title: "Test Sushi"
 date: "2022-03-12"
 tag: ["a", "b", "c"]
 category: ["dev"]
@@ -291,10 +319,53 @@ For example, you can write a shell script to execute pandoc
 pandoc -f [filter] --katex
 ```
 
-### Site Initialization and Starters
+### Themes
+
+If you need to use a theme, it is recommended to put it into `_theme`, and add a line in `_site.yml`:
+
+```yaml
+theme_dir: "_theme"
+```
+
+It is actually possible to use any name started with an underscore `_` to name the theme directory. Below we assume you stick to the recommended name `_theme`.
+
+The theme folder structure is the same as the site structure. When generating a site, sushi will merge the site tree in the theme folder with the existing site tree, and will also merge the configuration in `_theme/_site.yml`. If the site tree conflicts with the site tree of a theme, the conflicting parts of the theme are ignored. In the same way, the configuration in `_site.yml` will override the configuration in `_theme/_site.yml`.
+
+For example, assume the site structure is as follows
+
+```
+site
+├── assets
+│   └── a.jpg
+├── helloworld.md
+├── _site.yml
+└── _theme
+    ├── assets
+    │   └── favicon.png
+    ├── _converters
+    ├── _includes
+    ├── _site.yml
+    └── _templates
+```
+
+Then, the generated site will be
+
+```
+_gen
+├── assets
+│   ├── a.jpg
+│   └── favicon.png
+└── helloworld.html
+```
+
+### Site Initialization and Starters (not recommended)
 
 When you execute `ssushi init [sitename]`, sushi will search for a starter named "default" in project config folder and current working directory, and then simply copy it to `./[sitename]`.
 
 You can use `--theme [starter_name/starter_path]` option to use other starters.
 
 Note that there is no default starter after installation with Cargo, you should create one manually.
+
+### Why did I make sushi?
+
+Refer to [my blog post](https://nth233.top/posts/2022-12-29-%E5%A6%82%E4%BD%95%E6%9B%B4%E5%A5%BD%E5%9C%B0%E4%BD%BF%E7%94%A8sushi.html) (in Chinese)
