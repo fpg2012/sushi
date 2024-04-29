@@ -366,6 +366,43 @@ You can use `--theme [starter_name/starter_path]` option to use other starters.
 
 Note that there is no default starter after installation with Cargo, you should create one manually.
 
+### Commandline Parameters of `ssushi`
+
+`ssushi`:
+
+```
+Usage: ssushi [OPTIONS] <COMMAND>
+
+Commands:
+  init   
+  build  
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --debug    
+  -q, --quiet    
+  -h, --help     Print help
+  -V, --version  Print version
+```
+
+`ssushi build`:
+
+```
+Usage: ssushi build [OPTIONS]
+
+Options:
+  -A, --regen-all                
+  -c, --config <CONFIG>          [default: _site.yml]
+  -g, --gen <GEN>                
+      --includes <INCLUDES>      
+      --converters <CONVERTERS>  
+      --templates <TEMPLATES>    
+      --theme <THEME>            
+  -s, --subpath <SUBPATH>        
+      --naive-skip               
+  -h, --help                     Print help
+```
+
 ### Why did I make sushi?
 
 Refer to [my blog post](https://nth233.top/posts/2022-12-29-%E5%A6%82%E4%BD%95%E6%9B%B4%E5%A5%BD%E5%9C%B0%E4%BD%BF%E7%94%A8sushi.html) (in Chinese)

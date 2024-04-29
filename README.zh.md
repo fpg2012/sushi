@@ -361,6 +361,43 @@ _gen
 
 注意，sushi并不自带默认模板，必须自己创建/下载一个。
 
+### `ssushi`的命令行参数
+
+`ssushi`：
+
+```
+Usage: ssushi [OPTIONS] <COMMAND>
+
+Commands:
+  init   
+  build  
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --debug    
+  -q, --quiet    
+  -h, --help     帮助信息
+  -V, --version  显示版本号
+```
+
+`ssushi build`：
+
+```
+Usage: ssushi build [OPTIONS]
+
+Options:
+  -A, --regen-all                
+  -c, --config <CONFIG>          [default: _site.yml]
+  -g, --gen <GEN>                
+      --includes <INCLUDES>      
+      --converters <CONVERTERS>  
+      --templates <TEMPLATES>    
+      --theme <THEME>            
+  -s, --subpath <SUBPATH>        手动指定需要生成的目录/文件
+      --naive-skip               启用naive-skip（仅通过时间戳判断是否生成）
+  -h, --help                     帮助信息
+```
+
 ### sushi的设计目的和“最佳”实践
 
 参见 [如何更好地使用sushi](https://nth233.top/posts/2022-12-29-%E5%A6%82%E4%BD%95%E6%9B%B4%E5%A5%BD%E5%9C%B0%E4%BD%BF%E7%94%A8sushi.html)
