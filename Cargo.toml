@@ -7,6 +7,7 @@ license = "LGPL-3.0"
 keywords = ["static", "site", "generator", "blog"]
 categories = ["command-line-utilities"]
 repository = "https://github.com/fpg2012/sushi"
+authors = ["nth233 (nth233@outlook.com)"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

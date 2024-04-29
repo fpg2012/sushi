@@ -77,8 +77,10 @@ pub struct Site {
     all_pages_object: Option<serde_yaml::Value>,
 
     regen_all: bool,
+    naive_skip: bool,
 
     theme: Option<Theme>,
+    subpath: Option<Vec<PathBuf>>,
 }
 
 pub struct SiteConfigs {
@@ -88,6 +90,8 @@ pub struct SiteConfigs {
     pub includes: Option<String>,
     pub templates: Option<String>,
     pub theme: Option<String>,
+    pub subpath: Option<Vec<String>>,
+    pub naive_skip: bool,
 }
 
 impl Site {
@@ -202,6 +206,18 @@ impl Site {
         debug!("{:?}", converter_choice);
         debug!("{:?}", taxonomies);
 
+        let naive_skip = site_configs.naive_skip;
+
+        let mut subpath = None;
+
+        if let Some(sp) = site_configs.subpath {
+            let mut real_subpath = vec![];
+            for p in sp {
+                real_subpath.push(PathBuf::from(p));
+            }
+            subpath = Some(real_subpath);
+        }
+
         Site {
             site_dir,
             config,
@@ -222,7 +238,9 @@ impl Site {
             all_pages_object: None,
             id_to_page_object: None,
             regen_all,
+            naive_skip,
             theme,
+            subpath,
         }
     }
 
@@ -307,7 +325,14 @@ impl Site {
                 let dest_path = gen_path.clone();
                 // check whether skip copy
                 let src_timestamp = timestamp;
-                let do_copy = self._decide_not_skip_static(&dest_path, src_timestamp);
+                let mut do_copy = self._decide_not_skip_static(&dest_path, src_timestamp);
+                if self.subpath != None {
+                    if self.naive_skip {
+                        do_copy = self._in_subpath(&path);
+                    } else {
+                        do_copy &= self._in_subpath(&path);
+                    }
+                }
                 if do_copy {
                     info!("[copy]  {} -> {}", path.clone().to_string_lossy(), &dest_path.to_string_lossy());
                     fs::copy(path.clone(), dest_path).unwrap();
@@ -562,7 +587,9 @@ impl Site {
         let paginator = page.borrow().paginate_info();
         let mut do_gen = self._decide_not_skip_page(page.clone());
         if let Some(_) = paginator {
-            do_gen = true;
+            if !self.naive_skip {
+                do_gen = true;
+            }
         }
         if !do_gen {
             debug!("[skip]  {}", page.borrow().path.clone().to_string_lossy());
@@ -1011,7 +1038,17 @@ impl Site {
         if self.regen_all {
             return true;
         }
+
+        if self.subpath != None {
+            return self._in_subpath(&page.borrow().path);
+        }
+
         let self_is_newer = self.is_src_newer(&page.borrow().gen_path, page.borrow().gen_time());
+
+        if self.naive_skip {
+            return self_is_newer;
+        }
+
         let mut next_is_newer = false;
         let mut last_is_newer = false;
         if let Some(next_page) = page.borrow().next() {
@@ -1051,6 +1088,26 @@ impl Site {
                 yml_str
             } else {
                 default_config
+            }
+        }
+    }
+
+    fn _in_subpath(&self, path: &PathBuf) -> bool {
+        match &self.subpath {
+            None => true,
+            Some(real_subpath) => {
+                for p in real_subpath {
+                    if p.is_dir() {
+                        if path.canonicalize().unwrap().starts_with(p.canonicalize().expect(format!("improper subpath {}", p.to_str().unwrap()).as_str())) {
+                            return true;
+                        }
+                    } else if p.is_file() {
+                        if p.canonicalize().expect(format!("improper subpath {}", p.to_str().unwrap()).as_str()) == path.canonicalize().unwrap() {
+                            return true;
+                        }
+                    }
+                }
+                false
             }
         }
     }

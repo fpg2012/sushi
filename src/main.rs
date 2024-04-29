@@ -51,6 +51,10 @@ enum Command {
         templates: Option<String>,
         #[clap(long)]
         theme: Option<String>,
+        #[clap(long, short = 's')]
+        subpath: Option<Vec<String>>,
+        #[clap(long)]
+        naive_skip: bool,
     }
 }
 
@@ -116,7 +120,7 @@ fn main() {
         } => {
             initialize_site(site_name, theme, path);
         }
-        Command::Build { regen_all, config, gen, includes, converters, templates, theme } => {
+        Command::Build { regen_all, config, gen, includes, converters, templates, theme, subpath, naive_skip } => {
             let site_configs = SiteConfigs {
                 config: config.clone(),
                 gen: gen.clone(),
@@ -124,6 +128,8 @@ fn main() {
                 includes: includes.clone(),
                 templates: templates.clone(),
                 theme: theme.clone(),
+                subpath: subpath.clone(),
+                naive_skip: naive_skip.clone(),
             };
             let mut site = Site::parse_site_dir(".".into(), regen_all.clone(), site_configs);
             site.generate_site();
