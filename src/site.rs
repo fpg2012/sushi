@@ -403,6 +403,31 @@ impl Site {
 
             let (fm, content) = extract_front_matter(path);
 
+            let mut fm_file_name = OsString::from("_");
+            fm_file_name.push(path.file_name().unwrap());
+            fm_file_name.push(".yml");
+            let fm_file_path = path.with_file_name(fm_file_name);
+            let mut fm_from_file: HashMap<String, serde_yaml::Value> = HashMap::new();
+            if fm_file_path.exists() {
+                let fm_content = fs::read_to_string(fm_file_path).expect("Unable to read front matter file");
+                fm_from_file = serde_yaml::from_str(&fm_content).expect("Unable to parse front matter file");
+            }
+
+            let mut fm = match fm {
+                Some(fm) => fm,
+                None => HashMap::new(),
+            };
+
+            for (key, value) in fm_from_file {
+                fm.entry(key).or_insert(value);
+            }
+
+            let fm = if fm.is_empty() {
+                None
+            } else {
+                Some(fm)
+            };
+
             let fm = match fm {
                 Some(fm) => fm,
                 None => {
@@ -597,7 +622,7 @@ impl Site {
         }
 
         //let (_, content) = extract_front_matter(path);
-        let content = page.borrow().content.clone();
+        let content = page.borrow().content.clone().as_bytes().to_vec();
 
         let mut converted = content;
         let mut converter_choice = String::new();
@@ -639,7 +664,7 @@ impl Site {
                             panic!("render failed");
                         }
                         let current_rendered = render_result.unwrap();
-                        rendered = current_rendered;
+                        rendered = current_rendered.as_bytes().to_vec();
                         current_layout = template.get_parent();
                     }
                 } else {
@@ -725,7 +750,7 @@ impl Site {
                                         panic!("render failed");
                                     }
                                     let current_rendered = render_result.unwrap();
-                                    rendered = current_rendered;
+                                    rendered = current_rendered.as_bytes().to_vec();
                                     current_layout = template.get_parent();
                                 }
                             } else {
