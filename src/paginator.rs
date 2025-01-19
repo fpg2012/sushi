@@ -10,6 +10,7 @@ pub struct Paginator {
     batch_paths: Vec<PathBuf>,
 }
 
+#[allow(dead_code)]
 impl Paginator {
     pub fn new(seq: &Vec<Value>, batch_size: usize, base_path: PathBuf) -> Self {
         let batch_paths =

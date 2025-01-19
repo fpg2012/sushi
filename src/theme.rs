@@ -8,6 +8,7 @@ use serde_yaml::Value;
 
 use crate::configuration_loader as confld;
 
+#[allow(dead_code)]
 pub struct Theme {
     pub theme_dir: PathBuf,
     pub config: HashMap<String, Value>,

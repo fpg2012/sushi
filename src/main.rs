@@ -10,25 +10,30 @@ mod theme;
 mod configuration_loader;
 
 use crate::site::{Site, SiteConfigs};
-use clap::Parser;
+use clap::{Parser, CommandFactory};
 use log::{error, info};
 use simple_logger::SimpleLogger;
 use std::path::PathBuf;
+use shadow_rs::shadow;
+
+shadow!(build);
 
 #[derive(clap::Parser)]
-#[clap(name = "sūshì", author = "nth233", version, about)]
+#[clap(name = "sūshì", author = "nth233", about)]
 struct Cli {
     #[clap(long)]
     debug: bool,
     #[clap(long, short = 'q')]
     quiet: bool,
     #[clap(subcommand)]
-    commands: Command,
+    commands: Option<Command>,
+    #[clap(long, short = 'V')]
+    version: bool,
 }
 
 #[derive(clap::Subcommand)]
 enum Command {
-    #[clap(arg_required_else_help = true)]
+    #[clap(arg_required_else_help = false)]
     Init {
         site_name: String,
         #[clap(long, default_value = "default")]
@@ -104,6 +109,10 @@ fn initialize_site(site_name: &String, theme: &PathBuf, path: &PathBuf) {
 
 fn main() {
     let cli = Cli::parse();
+    if cli.version {
+        println!("sūshì v{} ({})", env!("CARGO_PKG_VERSION"), build::SHORT_COMMIT);
+        return;
+    }
     let mut level = log::LevelFilter::Info;
     if cli.quiet {
         level = log::LevelFilter::Error;
@@ -112,15 +121,14 @@ fn main() {
     }
     SimpleLogger::new().with_level(level).init().unwrap();
 
-    match &cli.commands {
-        Command::Init {
-            site_name,
-            theme,
-            path,
-        } => {
-            initialize_site(site_name, theme, path);
-        }
-        Command::Build { regen_all, config, gen, includes, converters, templates, theme, subpath, naive_skip } => {
+    match cli.commands {
+        None => {
+            Cli::command().print_help().unwrap_or_else(|e| eprintln!("{}", e));
+        },
+        Some(Command::Init { site_name, theme, path }) => {
+            initialize_site(&site_name, &theme, &path);
+        },
+        Some(Command::Build { regen_all, config, gen, includes, converters, templates, theme, subpath, naive_skip }) => {
             let site_configs = SiteConfigs {
                 config: config.clone(),
                 gen: gen.clone(),

@@ -12,6 +12,7 @@ pub type PageRef = Rc<RefCell<Page>>;
 pub type PageId = String;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Page {
     pub front_matter: HashMap<String, serde_yaml::Value>,
     // pub other_attributes: HashMap<String, serde_yaml::Value>,

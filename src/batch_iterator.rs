@@ -14,7 +14,7 @@ impl<T: Iterator, U: Iterator> BatchIterator<T, U> {
             come_with_batch,
         }
     }
-
+    #[allow(dead_code)]
     pub fn current_batch(&self) -> usize {
         self.current_batch
     }

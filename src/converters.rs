@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use subprocess::Exec;
 
+#[allow(dead_code)]
 pub struct Converter {
     pub name: String,
     pub path: PathBuf,

@@ -6,6 +6,7 @@ use std::time::SystemTime;
 pub type ETNodeRef = Rc<RefCell<ExistingTreeNode>>;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ExistingTreeNode {
     NormalDir {
         children: Vec<ETNodeRef>,
