@@ -646,6 +646,7 @@ impl Site {
                 let layout = page_config.get("layout");
                 let mut rendered = converted;
                 if let Some(Value::String(layout_str)) = layout {
+                    let mut rendered_str = String::from_utf8(rendered).expect("Invalid UTF-8 sequence");
                     debug!("try to use layout {}", layout_str);
                     let mut current_layout = layout_str;
                     while let Some(template) = self.templates.get(current_layout) {
@@ -656,7 +657,7 @@ impl Site {
                         );
                         base_globals.insert(
                             "content".parse().unwrap(),
-                            liquid::model::to_value(&rendered).unwrap(),
+                            liquid::model::to_value(&rendered_str).unwrap(),
                         );
                         let render_result = template.render(base_globals);
                         if render_result.is_err() {
@@ -664,9 +665,10 @@ impl Site {
                             panic!("render failed");
                         }
                         let current_rendered = render_result.unwrap();
-                        rendered = current_rendered.as_bytes().to_vec();
+                        rendered_str = current_rendered;
                         current_layout = template.get_parent();
                     }
+                    rendered = rendered_str.as_bytes().to_vec();
                 } else {
                     debug!("no layout set, copy by default");
                 }
@@ -690,7 +692,7 @@ impl Site {
                             .unwrap_or(trace!("cannot remove {:?}", p.base_url_dir()));
                         fs::create_dir(p.base_url_dir())
                             .unwrap_or(trace!("cannot create {:?}", p.base_url_dir()));
-                        let mut rendered = converted;
+                        let mut rendered = String::from_utf8(converted).expect("Invalid UTF-8 sequence");
                         let mut paginator_object = p.gen_paginator_object();
                         let batch_urls = p
                             .batch_paths()
@@ -750,7 +752,7 @@ impl Site {
                                         panic!("render failed");
                                     }
                                     let current_rendered = render_result.unwrap();
-                                    rendered = current_rendered.as_bytes().to_vec();
+                                    rendered = current_rendered;
                                     current_layout = template.get_parent();
                                 }
                             } else {

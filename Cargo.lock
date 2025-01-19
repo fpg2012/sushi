@@ -986,7 +986,7 @@ dependencies = [
 
 [[package]]
 name = "sushi-gen"
-version = "0.2.10"
+version = "0.2.11"
 dependencies = [
  "chrono",
  "clap",
