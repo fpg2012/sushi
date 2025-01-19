@@ -42,23 +42,23 @@ enum Command {
         path: PathBuf,
     },
     Build {
-        #[clap(long, short = 'A')]
+        #[clap(long, short = 'A', help = "regenerate all files")]
         regen_all: bool,
         #[clap(long, short = 'c', default_value = "_site.yml")]
         config: String,
-        #[clap(long, short = 'g')]
+        #[clap(long, short = 'g', help = "generated files directory (_gen)")]
         gen: Option<String>,
-        #[clap(long)]
+        #[clap(long, help = "includes directory (_includes)")]
         includes: Option<String>,
-        #[clap(long)]
+        #[clap(long, help = "converters directory (_converters)")]
         converters: Option<String>,
-        #[clap(long)]
+        #[clap(long, help = "templates directory (_templates)")]
         templates: Option<String>,
-        #[clap(long)]
+        #[clap(long, help = "theme directory")]
         theme: Option<String>,
-        #[clap(long, short = 's')]
+        #[clap(long, short = 's', help = "generate only a subpath")]
         subpath: Option<Vec<String>>,
-        #[clap(long)]
+        #[clap(long, help = "skip all unmodified files naively")]
         naive_skip: bool,
     }
 }
