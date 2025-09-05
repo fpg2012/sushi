@@ -17,19 +17,20 @@ name="ssushi"
 path="src/main.rs"
 
 [dependencies]
-liquid = "0.26.9"
+liquid = "0.26.11"
 serde = "1.0"
-serde_yaml = "0.9.30"
+serde_yaml = "0.9.34"
 subprocess = "0.2.9"
 lazy_static = "1.5.0"
 itertools = "0.14.0"
-log = "0.4.25"
-clap = { version = "4.5.26", features = ["derive"] }
-chrono = "0.4.39"
+log = "0.4.28"
+clap = { version = "4.5.47", features = ["derive"] }
+chrono = "0.4.41"
 directories = "6.0.0"
-regex = "1.11.1"
+regex = "1.11.2"
 fs_extra = "1.3.0"
 shadow-rs = { version = "0.37.0", features = ["metadata"]}
+toml = "0.9.5"
 
 [dependencies.simple_logger]
 version = "5.0.0"
