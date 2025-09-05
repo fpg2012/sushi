@@ -10,7 +10,9 @@ enum ExtractorState {
     OutYaml,
 }
 
-pub fn extract_front_matter(path: &PathBuf) -> (Option<HashMap<String, serde_yaml::Value>>, String) {
+pub fn extract_front_matter(
+    path: &PathBuf,
+) -> (Option<HashMap<String, serde_yaml::Value>>, String) {
     let f = File::open(path).expect("cannot open file");
     let f = BufReader::new(f);
     let mut front_matter = String::new();
@@ -18,7 +20,7 @@ pub fn extract_front_matter(path: &PathBuf) -> (Option<HashMap<String, serde_yam
     let mut state = ExtractorState::Start;
     let delim = regex::Regex::new(r"^-{3,}\s*$").unwrap();
     let space = regex::Regex::new(r"^\s*$").unwrap();
-    
+
     let mut no_fm_flag = false;
 
     for line in f.lines() {
@@ -51,11 +53,19 @@ pub fn extract_front_matter(path: &PathBuf) -> (Option<HashMap<String, serde_yam
         }
     }
     trace!("{:?}, {:?}", &front_matter, &content);
-    let fm: Option<HashMap<String, serde_yaml::Value>> = if !no_fm_flag {
-        Some(serde_yaml::from_str(front_matter.as_str()).unwrap_or(HashMap::new()))
-    } else {
-        None
-    };
-        
+
+    // try parse toml
+    let mut fm: Option<HashMap<String, serde_yaml::Value>> = None;
+
+    if !no_fm_flag {
+        match toml::from_str(front_matter.as_str()) {
+            Ok(real_fm) => fm = Some(real_fm),
+            Err(_) => {
+                fm = Some(serde_yaml::from_str(front_matter.as_str()).unwrap_or(HashMap::new()))
+            }
+        }
+        // fm = Some(serde_yaml::from_str(front_matter.as_str()).unwrap_or(HashMap::new()))
+    }
+
     (fm, content)
 }
