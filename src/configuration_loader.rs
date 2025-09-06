@@ -15,9 +15,20 @@ use crate::extract_frontmatter::extract_front_matter;
 use crate::layout::Layout;
 
 pub fn parse_config_file(path: PathBuf) -> HashMap<String, Value> {
-    let raw_config = fs::read(path).expect("cannot read config file");
-    let mut config: HashMap<String, Value> =
-        serde_yaml::from_slice(raw_config.as_slice()).expect("cannot parse config file");
+    let raw_config = fs::read(&path).expect("cannot read config file");
+
+    let mut is_toml = false;
+    if let Some(ext_name) = path.extension() {
+        if ext_name == "toml" {
+            is_toml = true;
+        }
+    }
+
+    let mut config: HashMap<String, Value> = if is_toml {
+        toml::from_slice(raw_config.as_slice()).expect("cannot parse toml config file")
+    } else {
+        serde_yaml::from_slice(raw_config.as_slice()).expect("cannot parse yaml config file")
+    };
     config.insert(
         String::from("time"),
         Value::String(chrono::Local::now().to_rfc3339()),
