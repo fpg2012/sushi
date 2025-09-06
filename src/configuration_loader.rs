@@ -1,16 +1,16 @@
-use std::collections::HashMap;
-use std::ffi::OsString;
-use std::fs::DirEntry;
-use std::fs;
-use std::option::Option;
-use std::path::PathBuf;
-use std::string::String;
 use liquid::partials::{EagerCompiler, InMemorySource};
 use liquid::ParserBuilder;
 use log::{debug, error};
 use serde_yaml::Value;
+use std::collections::HashMap;
+use std::ffi::OsString;
+use std::fs;
+use std::fs::DirEntry;
+use std::option::Option;
+use std::path::PathBuf;
+use std::string::String;
 
-use crate::converters::Converter;
+use crate::converters::ExternalConverter;
 use crate::extract_frontmatter::extract_front_matter;
 use crate::layout::Layout;
 
@@ -26,7 +26,10 @@ pub fn parse_config_file(path: PathBuf) -> HashMap<String, Value> {
     config
 }
 
-pub fn string_from_config(key: &str, config: &HashMap<String, serde_yaml::Value>) -> Option<String> {
+pub fn string_from_config(
+    key: &str,
+    config: &HashMap<String, serde_yaml::Value>,
+) -> Option<String> {
     if let Some(serde_yaml::Value::String(s)) = config.get(key) {
         Some(s.clone())
     } else {
@@ -41,7 +44,15 @@ pub fn parse_includes(path: PathBuf) -> HashMap<String, PathBuf> {
             if let Ok(entry) = entry {
                 if let Some(ext) = entry.path().extension() {
                     if ext == "liquid" {
-                        partial_list.insert(entry.path().file_stem().unwrap().to_string_lossy().to_string(), entry.path().clone());
+                        partial_list.insert(
+                            entry
+                                .path()
+                                .file_stem()
+                                .unwrap()
+                                .to_string_lossy()
+                                .to_string(),
+                            entry.path().clone(),
+                        );
                         debug!(
                             "[discover] partial: \"{}\"",
                             entry.path().file_stem().unwrap().to_string_lossy()
@@ -57,7 +68,8 @@ pub fn parse_includes(path: PathBuf) -> HashMap<String, PathBuf> {
 pub fn compile_partials(partial_list: HashMap<String, PathBuf>) -> EagerCompiler<InMemorySource> {
     let mut compiler = EagerCompiler::<InMemorySource>::empty();
     for (partial_name, partial_path) in partial_list {
-        let content = fs::read_to_string(&partial_path).expect("cannot open liquid partial in include");
+        let content =
+            fs::read_to_string(&partial_path).expect("cannot open liquid partial in include");
         compiler.add(partial_name, content);
         debug!(
             "[compile] partial: \"{}\"",
@@ -73,7 +85,15 @@ pub fn parse_templates(path: PathBuf) -> HashMap<String, PathBuf> {
         if let Ok(entry) = entry {
             if let Some(ext) = entry.path().extension() {
                 if ext == "liquid" {
-                    template_list.insert(entry.path().file_stem().unwrap().to_string_lossy().to_string(), entry.path());
+                    template_list.insert(
+                        entry
+                            .path()
+                            .file_stem()
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_string(),
+                        entry.path(),
+                    );
                     debug!(
                         "[discover] template: \"{}\"",
                         entry.path().file_stem().unwrap().to_string_lossy()
@@ -85,7 +105,10 @@ pub fn parse_templates(path: PathBuf) -> HashMap<String, PathBuf> {
     template_list
 }
 
-pub fn compile_templates(partials: EagerCompiler<InMemorySource>, template_list: HashMap<String, PathBuf>) -> HashMap<String, Layout> {
+pub fn compile_templates(
+    partials: EagerCompiler<InMemorySource>,
+    template_list: HashMap<String, PathBuf>,
+) -> HashMap<String, Layout> {
     let mut templates = HashMap::new();
     let parser = ParserBuilder::with_stdlib()
         .partials(partials)
@@ -93,25 +116,19 @@ pub fn compile_templates(partials: EagerCompiler<InMemorySource>, template_list:
         .unwrap();
     for (template_name, template_path) in template_list {
         let (fm, real_content) = extract_front_matter(&template_path);
-            let fm = match fm {
-                Some(fm) => fm,
-                None => HashMap::new(),
-            };
-            let template = parser.parse(real_content.as_str());
-            if let Err(e) = template {
-                error!("{}", e);
-                panic!("compile template error");
-            }
-            let template = template.unwrap();
-            let layout = Layout::new(fm, template);
-            debug!(
-                "[compile] template: \"{}\"",
-                &template_name
-            );
-            templates.insert(
-                template_name,
-                layout,
-            );
+        let fm = match fm {
+            Some(fm) => fm,
+            None => HashMap::new(),
+        };
+        let template = parser.parse(real_content.as_str());
+        if let Err(e) = template {
+            error!("{}", e);
+            panic!("compile template error");
+        }
+        let template = template.unwrap();
+        let layout = Layout::new(fm, template);
+        debug!("[compile] template: \"{}\"", &template_name);
+        templates.insert(template_name, layout);
     }
     templates
 }
@@ -120,7 +137,10 @@ pub fn parse_converters(path: PathBuf) -> HashMap<String, PathBuf> {
     let mut converter_list: HashMap<String, PathBuf> = HashMap::new();
     for entry in fs::read_dir(path).expect("cannot open _converter dir") {
         if let Ok(entry) = entry {
-            converter_list.insert(entry.file_name().to_string_lossy().to_string(), entry.path());
+            converter_list.insert(
+                entry.file_name().to_string_lossy().to_string(),
+                entry.path(),
+            );
             debug!(
                 "[discover] converter: \"{}\"",
                 entry.file_name().to_string_lossy().to_string()
@@ -130,13 +150,18 @@ pub fn parse_converters(path: PathBuf) -> HashMap<String, PathBuf> {
     converter_list
 }
 
-pub fn load_converters(converter_list: HashMap<String, PathBuf>) -> HashMap<String, Converter> {
+pub fn load_converters(
+    converter_list: HashMap<String, PathBuf>,
+) -> HashMap<String, ExternalConverter> {
     let mut converters = HashMap::new();
     for (converter_name, converter_path) in converter_list {
         debug!("[compile] converter: \"{}\"", &converter_name);
+        if converter_path.as_os_str().to_str().unwrap() == "__internal__" {
+            continue;
+        }
         converters.insert(
             converter_name.clone(),
-            Converter {
+            ExternalConverter {
                 name: converter_name,
                 path: converter_path,
             },
@@ -146,15 +171,13 @@ pub fn load_converters(converter_list: HashMap<String, PathBuf>) -> HashMap<Stri
 }
 
 pub fn find_dir(base_dir: &PathBuf, dir_name: &String) -> Option<Result<DirEntry, std::io::Error>> {
-    let entry = fs::read_dir(base_dir.clone())
-        .unwrap()
-        .find(|x| {
-            if let Ok(file) = x {
-                file.file_name() == OsString::from(&dir_name) && file.path().is_dir()
-            } else {
-                false
-            }
-        });
+    let entry = fs::read_dir(base_dir.clone()).unwrap().find(|x| {
+        if let Ok(file) = x {
+            file.file_name() == OsString::from(&dir_name) && file.path().is_dir()
+        } else {
+            false
+        }
+    });
     entry
 }
 

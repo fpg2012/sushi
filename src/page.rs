@@ -136,7 +136,7 @@ impl Page {
         if config.get("search_text") == None {
             config.insert(
                 "search_text".to_string(),
-                serde_yaml::Value::String(self.content.clone())
+                serde_yaml::Value::String(self.content.clone()),
             );
         }
         config.insert(
@@ -145,7 +145,7 @@ impl Page {
         );
         config.insert(
             "content".to_string(),
-            serde_yaml::Value::String(self.content.clone())
+            serde_yaml::Value::String(self.content.clone()),
         );
         config
     }

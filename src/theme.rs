@@ -1,10 +1,10 @@
+use log::{info, warn};
+use serde_yaml::Value;
 use std::collections::HashMap;
-use std::fs;
 use std::ffi::OsString;
+use std::fs;
 use std::path::PathBuf;
 use std::string::String;
-use log::{warn, info};
-use serde_yaml::Value;
 
 use crate::configuration_loader as confld;
 
@@ -29,7 +29,7 @@ impl Theme {
                     false
                 }
             })
-            .expect(format!{"cannot find theme configuration file: {}", "_site.yml"}.as_str())
+            .expect(format! {"cannot find theme configuration file: {}", "_site.yml"}.as_str())
             .unwrap();
         let config = confld::parse_config_file(temp_config.path());
 
@@ -41,8 +41,10 @@ impl Theme {
         let theme_templates_dir = confld::string_from_config("templates_dir", &config);
         let theme_includes_dir = confld::string_from_config("includes_dir", &config);
 
-        let _converters_dir = Self::_decide_theme_config(theme_converters_dir, "_converters".to_string());
-        let _templates_dir = Self::_decide_theme_config(theme_templates_dir, "_templates".to_string());
+        let _converters_dir =
+            Self::_decide_theme_config(theme_converters_dir, "_converters".to_string());
+        let _templates_dir =
+            Self::_decide_theme_config(theme_templates_dir, "_templates".to_string());
         let _includes_dir = Self::_decide_theme_config(theme_includes_dir, "_includes".to_string());
 
         // search for _includes

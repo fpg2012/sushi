@@ -1,14 +1,18 @@
 use std::path::PathBuf;
 use subprocess::Exec;
 
+pub trait Converter {
+    fn convert(&self, content: Vec<u8>) -> Vec<u8>;
+}
+
 #[allow(dead_code)]
-pub struct Converter {
+pub struct ExternalConverter {
     pub name: String,
     pub path: PathBuf,
 }
 
-impl Converter {
-    pub fn convert(&self, content: Vec<u8>) -> Vec<u8> {
+impl Converter for ExternalConverter {
+    fn convert(&self, content: Vec<u8>) -> Vec<u8> {
         let cur_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&self.path.parent().unwrap()).unwrap();
         let mut temp_dir = PathBuf::from(".");

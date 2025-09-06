@@ -1,20 +1,22 @@
 mod batch_iterator;
+mod configuration_loader;
 mod converters;
+mod existing_tree;
 mod extract_frontmatter;
 mod layout;
+mod markdown_parser;
 mod page;
 mod paginator;
+mod pulldown_cmark_katex;
 mod site;
-mod existing_tree;
 mod theme;
-mod configuration_loader;
 
 use crate::site::{Site, SiteConfigs};
-use clap::{Parser, CommandFactory};
+use clap::{CommandFactory, Parser};
 use log::{error, info};
+use shadow_rs::shadow;
 use simple_logger::SimpleLogger;
 use std::path::PathBuf;
-use shadow_rs::shadow;
 
 shadow!(build);
 
@@ -60,7 +62,7 @@ enum Command {
         subpath: Option<Vec<String>>,
         #[clap(long, help = "skip all unmodified files naively")]
         naive_skip: bool,
-    }
+    },
 }
 
 fn initialize_site(site_name: &String, theme: &PathBuf, path: &PathBuf) {
@@ -110,7 +112,11 @@ fn initialize_site(site_name: &String, theme: &PathBuf, path: &PathBuf) {
 fn main() {
     let cli = Cli::parse();
     if cli.version {
-        println!("sūshì v{} ({})", env!("CARGO_PKG_VERSION"), build::SHORT_COMMIT);
+        println!(
+            "sūshì v{} ({})",
+            env!("CARGO_PKG_VERSION"),
+            build::SHORT_COMMIT
+        );
         return;
     }
     let mut level = log::LevelFilter::Info;
@@ -123,12 +129,28 @@ fn main() {
 
     match cli.commands {
         None => {
-            Cli::command().print_help().unwrap_or_else(|e| eprintln!("{}", e));
-        },
-        Some(Command::Init { site_name, theme, path }) => {
+            Cli::command()
+                .print_help()
+                .unwrap_or_else(|e| eprintln!("{}", e));
+        }
+        Some(Command::Init {
+            site_name,
+            theme,
+            path,
+        }) => {
             initialize_site(&site_name, &theme, &path);
-        },
-        Some(Command::Build { regen_all, config, gen, includes, converters, templates, theme, subpath, naive_skip }) => {
+        }
+        Some(Command::Build {
+            regen_all,
+            config,
+            gen,
+            includes,
+            converters,
+            templates,
+            theme,
+            subpath,
+            naive_skip,
+        }) => {
             let site_configs = SiteConfigs {
                 config: config.clone(),
                 gen: gen.clone(),
