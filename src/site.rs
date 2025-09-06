@@ -61,6 +61,7 @@ pub struct Site {
     site_url: Option<String>,
     templates: HashMap<String, Layout>,
     converters: HashMap<String, ExternalConverter>,
+    internal_markdown_parser: MarkdownParser,
     gen_dir: PathBuf,
     site_tree: Option<NodeRef>,
     existing_map: Rc<RefCell<HashMap<PathBuf, ETNodeRef>>>,
@@ -257,6 +258,7 @@ impl Site {
             naive_skip,
             theme,
             subpath,
+            internal_markdown_parser: MarkdownParser::new(),
         }
     }
 
@@ -718,8 +720,7 @@ impl Site {
                 .unwrap()
                 == "md"
             {
-                let markdown_converter = MarkdownParser::new();
-                converted = markdown_converter.convert(converted);
+                converted = self.internal_markdown_parser.convert(converted);
             }
             debug!("no converter set, copy by default");
         }
