@@ -12,6 +12,11 @@ build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+lto = true
+strip = true
+opt-level = 2
+
 [[bin]]
 name="ssushi"
 path="src/main.rs"
@@ -33,6 +38,7 @@ shadow-rs = { version = "0.37.0", features = ["metadata"]}
 toml = "0.9.5"
 pulldown-cmark = "0.13.0"
 katex = "0.4.6"
+syntect = { version = "5.2.0" }
 
 [dependencies.simple_logger]
 version = "5.0.0"

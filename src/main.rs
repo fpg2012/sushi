@@ -7,7 +7,6 @@ mod layout;
 mod markdown_parser;
 mod page;
 mod paginator;
-mod pulldown_cmark_katex;
 mod site;
 mod theme;
 
