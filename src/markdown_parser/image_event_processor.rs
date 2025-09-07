@@ -1,3 +1,5 @@
+use std::vec;
+
 use super::event_processor::EventProcessor;
 use pulldown_cmark::{Event, LinkType, Tag, TagEnd};
 
@@ -46,8 +48,13 @@ impl ImageEventProcessor {
     pub fn process_image_event<'a>(&mut self, event: Event<'a>) -> Vec<Event<'a>> {
         match event {
             Event::Start(Tag::Paragraph) => {
-                self.state = State::InParagraph;
-                vec![]
+                if self.state == State::InParagraph {
+                    self.state = State::InParagraph;
+                    vec![Event::Start(Tag::Paragraph)]
+                } else {
+                    self.state = State::InParagraph;
+                    vec![]
+                }
             }
             Event::Start(Tag::Image {
                 link_type,
@@ -62,8 +69,7 @@ impl ImageEventProcessor {
                     title: title.to_string(),
                     id: id.to_string(),
                 });
-
-                vec![Event::Start(Tag::HtmlBlock)]
+                vec![]
             }
             Event::Text(t) => {
                 if self.state == State::InImage {
@@ -71,6 +77,7 @@ impl ImageEventProcessor {
                     self.caption.push_str(&t);
                     vec![]
                 } else {
+                    self.state = State::NotImage;
                     vec![Event::Text(t)]
                 }
             }
@@ -87,6 +94,9 @@ impl ImageEventProcessor {
                 if self.state == State::InImage {
                     self.state = State::NotImage;
                     vec![]
+                } else if self.state == State::InParagraph {
+                    self.state = State::NotImage;
+                    vec![Event::Start(Tag::Paragraph), event]
                 } else {
                     vec![event]
                 }
