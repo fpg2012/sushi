@@ -27,3 +27,11 @@ impl Converter for ExternalConverter {
         read_content
     }
 }
+
+pub struct DummyConverter {}
+
+impl Converter for DummyConverter {
+    fn convert(&self, content: Vec<u8>) -> Vec<u8> {
+        content
+    }
+}

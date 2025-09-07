@@ -9,8 +9,11 @@ use std::fs::DirEntry;
 use std::option::Option;
 use std::path::PathBuf;
 use std::string::String;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-use crate::converters::ExternalConverter;
+use crate::converters::{ExternalConverter, Converter, DummyConverter};
+use crate::markdown_parser::MarkdownParser;
 use crate::extract_frontmatter::extract_front_matter;
 use crate::layout::Layout;
 
@@ -163,21 +166,29 @@ pub fn parse_converters(path: PathBuf) -> HashMap<String, PathBuf> {
 
 pub fn load_converters(
     converter_list: HashMap<String, PathBuf>,
-) -> HashMap<String, ExternalConverter> {
-    let mut converters = HashMap::new();
+) -> HashMap<String, Rc<RefCell<dyn Converter>>> {
+    let mut converters: HashMap<String, Rc<RefCell<dyn Converter>>> = HashMap::new();
     for (converter_name, converter_path) in converter_list {
         debug!("[compile] converter: \"{}\"", &converter_name);
-        if converter_path.as_os_str().to_str().unwrap() == "__internal__" {
-            continue;
-        }
+        // external converter
         converters.insert(
             converter_name.clone(),
-            ExternalConverter {
+            Rc::new(RefCell::new(ExternalConverter {
                 name: converter_name,
                 path: converter_path,
-            },
+            })),
         );
     }
+    // dummy converter for copy
+    converters.insert(
+        "__copy__".to_string(),
+        Rc::new(RefCell::new(DummyConverter {})),
+    );
+    // internal converter (markdown only for now)
+    converters.insert(
+        "__internal__".to_string(),
+        Rc::new(RefCell::new(MarkdownParser::new())),
+    );
     converters
 }
 

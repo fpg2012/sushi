@@ -1,5 +1,6 @@
 use katex;
 use pulldown_cmark::Event;
+use super::event_processor::EventProcessor;
 
 pub struct MathEventProcessor {
     display_style_opts: katex::opts::Opts,
@@ -13,7 +14,7 @@ impl MathEventProcessor {
         }
     }
 
-    pub fn process_math_event<'a>(&'a self, event: Event<'a>) -> Event<'a> {
+    pub fn process_math_event<'a>(&self, event: Event<'a>) -> Event<'a> {
         match event {
             Event::InlineMath(math_exp) => {
                 Event::InlineHtml(katex::render(&math_exp).unwrap().into())
@@ -25,5 +26,11 @@ impl MathEventProcessor {
             ),
             _ => event,
         }
+    }
+}
+
+impl EventProcessor for MathEventProcessor {
+    fn apply<'a>(&'a mut self, iter: impl Iterator<Item = Event<'a>>) -> impl Iterator<Item = Event<'a>> {
+        iter.map(move |event| self.process_math_event(event))
     }
 }

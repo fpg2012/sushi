@@ -1,6 +1,9 @@
+pub mod event_processor;
 pub mod highlight_event_processor;
+pub mod image_event_processor;
 pub mod math_event_processor;
 
+use event_processor::ProcessWith;
 use crate::{
     converters::Converter, markdown_parser::highlight_event_processor::HighlightEventProcessor,
 };
@@ -8,12 +11,28 @@ use math_event_processor::MathEventProcessor;
 use pulldown_cmark::{Options, Parser, TextMergeStream};
 use std::cell::RefCell;
 
+macro_rules! render_pipeline {
+    ($parser:expr, $($processor:expr),*) => {
+        {
+            let parse_iter = TextMergeStream::new($parser);
+            $(
+                let mut processor = $processor.borrow_mut();
+                let parse_iter = parse_iter.process_with(&mut *processor);
+            )*
+
+            let mut html_output = String::new();
+            pulldown_cmark::html::push_html(&mut html_output, parse_iter);
+            html_output
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub struct MarkdownParser {
     pub with_katex: bool,
     pub with_highlight: bool,
-    pub math_event_processor: MathEventProcessor,
-    pub highlight_event_processor: Box<RefCell<HighlightEventProcessor>>,
+    math_event_processor: Box<RefCell<MathEventProcessor>>,
+    highlight_event_processor: Box<RefCell<HighlightEventProcessor>>,
 }
 
 impl MarkdownParser {
@@ -21,7 +40,7 @@ impl MarkdownParser {
         MarkdownParser {
             with_katex: false,
             with_highlight: false,
-            math_event_processor: MathEventProcessor::new(),
+            math_event_processor: Box::new(RefCell::new(MathEventProcessor::new())),
             highlight_event_processor: Box::new(RefCell::new(HighlightEventProcessor::new())),
         }
     }
@@ -38,18 +57,9 @@ impl Converter for MarkdownParser {
         options.insert(Options::ENABLE_FOOTNOTES);
         options.insert(Options::ENABLE_TABLES);
 
-        let parser = Parser::new_ext(content_utf8.as_str(), options);
-        let parse_iter = TextMergeStream::new(parser)
-            .map(|event| self.math_event_processor.process_math_event(event))
-            .map(|event| {
-                self.highlight_event_processor
-                    .borrow_mut()
-                    .process_highlight_event(event)
-            });
-
-        let mut html_output = String::new();
-        pulldown_cmark::html::push_html(&mut html_output, parse_iter);
-
+        let parser = Parser::new_ext(&content_utf8, options);
+        
+        let html_output = render_pipeline!(parser, self.math_event_processor, self.highlight_event_processor);
         html_output.into_bytes()
     }
 }

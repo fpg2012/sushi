@@ -3,6 +3,8 @@ use syntect::html::{ClassStyle, ClassedHTMLGenerator};
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
+use super::event_processor::EventProcessor;
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum State {
     NotCodeBlock,
@@ -64,6 +66,12 @@ impl HighlightEventProcessor {
             }
             _ => event,
         }
+    }
+}
+
+impl EventProcessor for HighlightEventProcessor {
+    fn apply<'a>(&'a mut self, iter: impl Iterator<Item = Event<'a>>) -> impl Iterator<Item = Event<'a>> {
+        iter.map(move |event| self.process_highlight_event(event))
     }
 }
 

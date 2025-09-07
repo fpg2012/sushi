@@ -13,12 +13,12 @@ use std::time::SystemTime;
 use std::vec::Vec;
 
 use crate::configuration_loader as confld;
-use crate::converters::{Converter, ExternalConverter};
+use crate::converters::Converter;
 use crate::existing_tree::ExistingTreeNode::File;
 use crate::existing_tree::{ETNodeRef, ExistingTreeNode};
 use crate::extract_frontmatter::extract_front_matter;
 use crate::layout::Layout;
-use crate::markdown_parser::MarkdownParser;
+// use crate::markdown_parser::MarkdownParser;
 use crate::page::{Page, PageRef};
 use crate::paginator::Paginator;
 use crate::site::SiteTreeNode::*;
@@ -60,8 +60,8 @@ pub struct Site {
     config: HashMap<String, serde_yaml::Value>,
     site_url: Option<String>,
     templates: HashMap<String, Layout>,
-    converters: HashMap<String, ExternalConverter>,
-    internal_markdown_parser: MarkdownParser,
+    converters: HashMap<String, Rc<RefCell<dyn Converter>>>,
+    // internal_markdown_parser: MarkdownParser,
     gen_dir: PathBuf,
     site_tree: Option<NodeRef>,
     existing_map: Rc<RefCell<HashMap<PathBuf, ETNodeRef>>>,
@@ -258,7 +258,6 @@ impl Site {
             naive_skip,
             theme,
             subpath,
-            internal_markdown_parser: MarkdownParser::new(),
         }
     }
 
@@ -373,7 +372,7 @@ impl Site {
                 }
                 if do_copy {
                     info!(
-                        "[copy]  {} -> {}",
+                        "[==copy]  {} -> {}",
                         path.clone().to_string_lossy(),
                         &dest_path.to_string_lossy()
                     );
@@ -708,21 +707,9 @@ impl Site {
         }
 
         if let Some(converter) = self.converters.get(&converter_choice) {
-            converted = converter.convert(converted);
+            converted = converter.borrow().convert(converted);
         } else {
-            // check if it is markdown
-            if page
-                .borrow()
-                .path
-                .extension()
-                .unwrap_or(OsStr::new(""))
-                .to_str()
-                .unwrap()
-                == "md"
-            {
-                converted = self.internal_markdown_parser.convert(converted);
-            }
-            debug!("no converter set, copy by default");
+            debug!("no converter is set, copy by default");
         }
 
         let page_config = page.borrow().get_page_config();
@@ -759,7 +746,7 @@ impl Site {
                 } else {
                     debug!("no layout set, copy by default");
                 }
-                info!("[conv]  {}", page.borrow().path.clone().to_string_lossy());
+                info!("[=>conv]  {}", page.borrow().path.clone().to_string_lossy());
                 debug!("[conv] to {:?}", &dest_path);
                 match fs::write(&dest_path, rendered) {
                     Ok(_) => (),
