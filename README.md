@@ -125,7 +125,9 @@ Actually only `_converters`, `_includes`, `_templates` and `_site.yml` are neces
 
 Templates (written in liquid template language) and partials (in liquid too) should be stored in `_templates` and `_includes` respectively. Site configurations are written in `_site.yml`. `_converters` stores executables for converting page files into HTML pages (i.e. markdown parsers).
 
-> Note that sūshì does not parse markdown (or any other format) directly, what it does is simply compiling templates you provide and insert the converted page contents into them. You are required to write converters which are basically simple scripts to execute **pandoc** or any other parser you like, for sushi to invoke.
+> sushi simply compiles templates and inserts the converted pages into them. You can always to write converters (bash scripts, or any executable file) to execute any parser for sushi to invoke (for example, you can use `pandoc` to parse markdown).
+
+> Since v0.2.12, sushi provides an internal converter for markdown files. ~~Before v0.2.12, sūshì did not parse markdown (or any other format) directly and thus manually-written external converters were required.~~
 
 After reading these important configurations, sushi convert all pages by executing the converters. Folders and file start with `.` or `_` will be ignored. All file that are not recognized as "page files" will be copied directly to the corresponding locations.
 
@@ -146,6 +148,8 @@ converter_choice:
 taxonomies: ["category", "tag"]
 ```
 
+> Since v0.2.12, you can use TOML format site configuration.
+
 | configuration      | value type      | function                                                                                           |
 | ------------------ | --------------- | -------------------------------------------------------------------------------------------------- |
 | `convert_ext`      | array of string | Valid extensions of page file. File with extension listed here is considered as page file.         |
@@ -158,6 +162,16 @@ taxonomies: ["category", "tag"]
 | `templates_dir` | string | folder of liquid templates. default: `_templates` |
 | `includes_dir` | string | folder of liquid partials. default: `_includes` |
 
+### Internal Converters
+
+Since v0.2.12, sushi provides two internal converters.
+
+| name | usage | valid format |
+| ---- | ----- | ---- |
+| `__internal__` | Convert markdown to HTML | `md` |
+| `__copy__` | Copy file without any modification | all |
+
+Markdown files(`.md`) will be converted to HTML by `__internal__` converter. Other files will be copied directly. If you do not want to convert markdown files, you should explicitly set `__copy__` converter for them.
 
 ### Page Front Matter
 
@@ -172,6 +186,8 @@ tag: ["a", "b", "c"]
 category: ["dev"]
 ---
 ```
+
+Since v0.2.12, you can use TOML format front matter. sushi will automatically detect the format of front matter.
 
 | name               | usage                              |
 | ------------------ | ---------------------------------- |
@@ -310,7 +326,7 @@ test
 
 ### Write Converters
 
-Writing converters is quite simple. A converter is a executable reads input from stdin and writes output to stdout. That's all.
+Writing converters is quite simple. An external converter is a executable reads input from stdin and writes output to stdout.
 
 For example, you can write a shell script to execute pandoc
 
@@ -318,6 +334,10 @@ For example, you can write a shell script to execute pandoc
 #!/bin/bash
 pandoc -f [filter] --katex
 ```
+
+> **Note**
+>
+> It is not required to write an external converter for markdown manually since v0.2.12. `sushi` now provides an `pulldown_cmark`-based converter for markdown files, which is generally much faster than an external one based on pandoc. All markdown file will default to use this `__internal__` converter.
 
 ### Themes
 
