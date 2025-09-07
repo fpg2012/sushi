@@ -1,6 +1,6 @@
+use super::event_processor::EventProcessor;
 use katex;
 use pulldown_cmark::Event;
-use super::event_processor::EventProcessor;
 
 pub struct MathEventProcessor {
     display_style_opts: katex::opts::Opts,
@@ -30,7 +30,10 @@ impl MathEventProcessor {
 }
 
 impl EventProcessor for MathEventProcessor {
-    fn apply<'a>(&'a mut self, iter: impl Iterator<Item = Event<'a>>) -> impl Iterator<Item = Event<'a>> {
+    fn apply<'a>(
+        &'a mut self,
+        iter: impl Iterator<Item = Event<'a>>,
+    ) -> impl Iterator<Item = Event<'a>> {
         iter.map(move |event| self.process_math_event(event))
     }
 }

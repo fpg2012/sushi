@@ -3,10 +3,10 @@ pub mod highlight_event_processor;
 pub mod image_event_processor;
 pub mod math_event_processor;
 
+use crate::converters::Converter;
 use event_processor::ProcessWith;
-use crate::{
-    converters::Converter, markdown_parser::highlight_event_processor::HighlightEventProcessor,
-};
+use highlight_event_processor::HighlightEventProcessor;
+use image_event_processor::ImageEventProcessor;
 use math_event_processor::MathEventProcessor;
 use pulldown_cmark::{Options, Parser, TextMergeStream};
 use std::cell::RefCell;
@@ -33,6 +33,7 @@ pub struct MarkdownParser {
     pub with_highlight: bool,
     math_event_processor: Box<RefCell<MathEventProcessor>>,
     highlight_event_processor: Box<RefCell<HighlightEventProcessor>>,
+    image_event_processor: Box<RefCell<ImageEventProcessor>>,
 }
 
 impl MarkdownParser {
@@ -42,6 +43,7 @@ impl MarkdownParser {
             with_highlight: false,
             math_event_processor: Box::new(RefCell::new(MathEventProcessor::new())),
             highlight_event_processor: Box::new(RefCell::new(HighlightEventProcessor::new())),
+            image_event_processor: Box::new(RefCell::new(ImageEventProcessor::new())),
         }
     }
 }
@@ -58,8 +60,13 @@ impl Converter for MarkdownParser {
         options.insert(Options::ENABLE_TABLES);
 
         let parser = Parser::new_ext(&content_utf8, options);
-        
-        let html_output = render_pipeline!(parser, self.math_event_processor, self.highlight_event_processor);
+
+        let html_output = render_pipeline!(
+            parser,
+            self.math_event_processor,
+            self.highlight_event_processor,
+            self.image_event_processor
+        );
         html_output.into_bytes()
     }
 }

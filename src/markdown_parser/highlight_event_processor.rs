@@ -70,7 +70,10 @@ impl HighlightEventProcessor {
 }
 
 impl EventProcessor for HighlightEventProcessor {
-    fn apply<'a>(&'a mut self, iter: impl Iterator<Item = Event<'a>>) -> impl Iterator<Item = Event<'a>> {
+    fn apply<'a>(
+        &'a mut self,
+        iter: impl Iterator<Item = Event<'a>>,
+    ) -> impl Iterator<Item = Event<'a>> {
         iter.map(move |event| self.process_highlight_event(event))
     }
 }
