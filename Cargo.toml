@@ -18,8 +18,12 @@ strip = true
 opt-level = 2
 
 [[bin]]
-name="ssushi"
-path="src/main.rs"
+name = "ssushi"
+path = "src/main.rs"
+
+[[bin]]
+name = "pmd_event_view"
+path = "src/tools/pmd_event_view.rs"
 
 [dependencies]
 liquid = "0.26.11"

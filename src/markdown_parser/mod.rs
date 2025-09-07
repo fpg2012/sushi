@@ -11,6 +11,7 @@ use math_event_processor::MathEventProcessor;
 use pulldown_cmark::{Options, Parser, TextMergeStream};
 use std::cell::RefCell;
 
+#[macro_export]
 macro_rules! render_pipeline {
     ($parser:expr, $($processor:expr),*) => {
         {
