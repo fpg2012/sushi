@@ -2,20 +2,20 @@ use liquid::partials::{EagerCompiler, InMemorySource};
 use liquid::ParserBuilder;
 use log::{debug, error};
 use serde_yaml::Value;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs;
 use std::fs::DirEntry;
 use std::option::Option;
 use std::path::PathBuf;
-use std::string::String;
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::string::String;
 
-use crate::converters::{ExternalConverter, Converter, DummyConverter};
-use crate::markdown_parser::MarkdownParser;
+use crate::converters::{Converter, DummyConverter, ExternalConverter};
 use crate::extract_frontmatter::extract_front_matter;
 use crate::layout::Layout;
+use crate::markdown_parser::MarkdownParser;
 
 pub fn parse_config_file(path: PathBuf) -> HashMap<String, Value> {
     let raw_config = fs::read(&path).expect("cannot read config file");

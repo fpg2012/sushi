@@ -64,7 +64,7 @@ impl Converter for MarkdownParser {
         let parser = Parser::new_ext(&content_utf8, options);
 
         /* old solution. less flexible, but compiles faster and be much simpler */
-        /* 
+        /*
         let mut html_output = String::new();
         let parse_iter = TextMergeStream::new(parser);
         let parse_iter = parse_iter
@@ -72,9 +72,9 @@ impl Converter for MarkdownParser {
             .map(|event| self.highlight_event_processor.borrow_mut().process_highlight_event(event))
             .map(|event| self.image_event_processor.borrow_mut().process_image_event(event))
             .flat_map(|event| event.into_iter());
-        pulldown_cmark::html::push_html(&mut html_output, parse_iter); 
+        pulldown_cmark::html::push_html(&mut html_output, parse_iter);
         */
-        
+
         /* new solution. seems more flexible */
         let html_output = render_pipeline!(
             parser,
