@@ -341,7 +341,7 @@ impl Site {
                 //     },
                 //     None => ()
                 // }
-                debug!("[mkdir]  {:?}", dest_path);
+                debug!("[+mkdir]  {:?}", dest_path);
                 fs::create_dir_all(&dest_path).expect("cannot create dir");
                 let mut globals = globals;
                 for child in children.iter() {
@@ -372,13 +372,13 @@ impl Site {
                 }
                 if do_copy {
                     info!(
-                        "[==copy]  {} -> {}",
+                        "[--copy]  {} -> {}",
                         path.clone().to_string_lossy(),
                         &dest_path.to_string_lossy()
                     );
                     fs::copy(path.clone(), dest_path).unwrap();
                 } else {
-                    debug!("[skip]  {}", path.clone().to_string_lossy());
+                    debug!("[  skip]  {}", path.clone().to_string_lossy());
                 }
                 globals
             }
@@ -746,15 +746,15 @@ impl Site {
                 } else {
                     debug!("no layout set, copy by default");
                 }
-                info!("[=>conv]  {}", page.borrow().path.clone().to_string_lossy());
-                debug!("[conv] to {:?}", &dest_path);
+                info!("[>>conv]  {}", page.borrow().path.clone().to_string_lossy());
+                debug!("[>>conv] to {:?}", &dest_path);
                 match fs::write(&dest_path, rendered) {
                     Ok(_) => (),
                     Err(_) => error!("cannot write to {:?}", dest_path),
                 }
             }
             Some((exp, batch_size)) => {
-                info!("[conv]  {}", page.borrow().path.clone().to_string_lossy());
+                info!("[>>conv]  {}", page.borrow().path.clone().to_string_lossy());
                 match Paginator::from_expression_and_object(
                     base_globals,
                     &exp,

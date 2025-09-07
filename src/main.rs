@@ -26,6 +26,8 @@ struct Cli {
     debug: bool,
     #[clap(long, short = 'q')]
     quiet: bool,
+    #[clap(long, short = 'v')]
+    verbose: bool,
     #[clap(subcommand)]
     commands: Option<Command>,
     #[clap(long, short = 'V')]
@@ -98,7 +100,7 @@ fn initialize_site(site_name: &String, theme: &PathBuf, path: &PathBuf) {
     let result = fs_extra::dir::copy(&theme, &path, &copy_options);
     match result {
         Ok(_) => {
-            info!("[copy] from {:?}", &theme);
+            info!("[--copy] from {:?}", &theme);
             info!("{:?} created", path.clone());
         }
         Err(e) => {
@@ -118,11 +120,13 @@ fn main() {
         );
         return;
     }
-    let mut level = log::LevelFilter::Info;
+    let mut level = log::LevelFilter::Warn;
     if cli.quiet {
         level = log::LevelFilter::Error;
     } else if cli.debug {
         level = log::LevelFilter::Debug;
+    } else if cli.verbose {
+        level = log::LevelFilter::Info;
     }
     SimpleLogger::new().with_level(level).init().unwrap();
 
